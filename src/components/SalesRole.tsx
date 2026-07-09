@@ -55,11 +55,11 @@ export default function SalesRole({ onBack, currentUser }: SalesRoleProps) {
 
   // Precios Base (Público General)
   const getBasePrices = (prodId: string) => {
-    // f-1 (pt-1): Detergente Limón 20L -> Público $790. Costo BOM: $427.5
-    // f-2 (pt-2): Desengrasante Naranja 20L -> Público $890. Costo BOM: $512
-    if (prodId === 'pt-1') return 790;
-    if (prodId === 'pt-2') return 890;
-    return 300; // default fallback
+    // pt-1: Mezcla Preparada para Pastel de Chocolate (Bolsa 1kg) -> Público $65
+    // pt-2: Polvo Preparado para Gelatina de Fresa (Bolsa 1kg) -> Público $85
+    if (prodId === 'pt-1') return 65;
+    if (prodId === 'pt-2') return 85;
+    return 150; // default fallback
   };
 
   // Calcular precio del producto de acuerdo a la lista del cliente seleccionado
@@ -153,7 +153,7 @@ export default function SalesRole({ onBack, currentUser }: SalesRoleProps) {
       });
 
       if (!stockCheckPassed) {
-        alert(`No hay suficiente stock en el almacén de producto terminado para surtir: ${missingStockProduct}. Favor de solicitar fabricación al laboratorio.`);
+        alert(`No hay suficiente stock en el almacén de producto terminado para surtir: ${missingStockProduct}. Favor de solicitar preparación o empaquetado al área de Producción.`);
         return;
       }
     }
@@ -175,7 +175,7 @@ export default function SalesRole({ onBack, currentUser }: SalesRoleProps) {
         id: `item-${Date.now()}-${idx}`,
         productName: mat.name,
         quantity: item.quantity,
-        unit: 'porrones',
+        unit: 'pzs',
         unitPrice,
         total: unitPrice * item.quantity
       };
@@ -288,12 +288,12 @@ export default function SalesRole({ onBack, currentUser }: SalesRoleProps) {
     const newMovements = [...MockDatabase.getStockMovements()];
 
     // Mapear items de cotización a stock
-    const isDetergente = targetSale.items.find(it => it.productName.includes('Detergente'));
-    const isDesengrasante = targetSale.items.find(it => it.productName.includes('Desengrasante'));
+    const isMezclaPastel = targetSale.items.find(it => it.productName.includes('Pastel'));
+    const isGelatina = targetSale.items.find(it => it.productName.includes('Gelatina'));
 
     const itemsToCheck = [
-      { id: 'pt-1', qty: isDetergente ? isDetergente.quantity : 0 },
-      { id: 'pt-2', qty: isDesengrasante ? isDesengrasante.quantity : 0 }
+      { id: 'pt-1', qty: isMezclaPastel ? isMezclaPastel.quantity : 0 },
+      { id: 'pt-2', qty: isGelatina ? isGelatina.quantity : 0 }
     ].filter(i => i.qty > 0);
 
     itemsToCheck.forEach(it => {
@@ -576,7 +576,7 @@ export default function SalesRole({ onBack, currentUser }: SalesRoleProps) {
 
                       <div className="flex items-center justify-between pt-2 border-t border-slate-50">
                         <span className={`text-[10px] font-bold ${isAgotado ? 'text-red-500' : 'text-slate-500'}`}>
-                          {isAgotado ? 'AGOTADO' : `Disponible: ${prod.stock} porrones`}
+                          {isAgotado ? 'AGOTADO' : `Disponible: ${prod.stock} pzs`}
                         </span>
                         
                         <button
@@ -810,7 +810,7 @@ export default function SalesRole({ onBack, currentUser }: SalesRoleProps) {
                             <span className="text-[10px] text-slate-500 font-mono">{new Date(cot.createdAt).toLocaleDateString('es-MX')}</span>
                           </div>
                           <h4 className="text-sm font-bold text-slate-950 mt-1">{cot.clientName}</h4>
-                          <p className="text-xs text-slate-600 mt-1">Surtido: {cot.items.map(it => `${it.quantity} porrones de ${it.productName.split('-')[0]}`).join(', ')}</p>
+                          <p className="text-xs text-slate-600 mt-1">Surtido: {cot.items.map(it => `${it.quantity} pzs de ${it.productName.split('-')[0]}`).join(', ')}</p>
                         </div>
 
                         <div className="text-right flex items-center space-x-3 w-full md:w-auto justify-between md:justify-end">

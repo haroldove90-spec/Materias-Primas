@@ -95,9 +95,9 @@ export default function ProductionRole({ onBack, currentUser }: ProductionRolePr
     MockDatabase.saveFormulas(updatedFormulas);
     MockDatabase.addAuditLog(
       currentUser.name,
-      `Creó nueva fórmula confidencial`,
+      `Creó nueva receta`,
       'Producción',
-      `Fórmula: ${newFormulaName}`
+      `Receta: ${newFormulaName}`
     );
     setFormulas(updatedFormulas);
     setSelectedFormulaId(newFormula.id);
@@ -106,7 +106,7 @@ export default function ProductionRole({ onBack, currentUser }: ProductionRolePr
     setNewFormulaName('');
     setNewFormulaDesc('');
     setFormulaIngredients([{ materialId: 'mat-1', percentage: 10 }, { materialId: 'mat-7', percentage: 90 }]);
-    alert('Fórmula guardada confidencialmente en la base de datos (BOM).');
+    alert('Receta guardada exitosamente en el catálogo del negocio.');
   };
 
   // Handler para crear orden de producción
@@ -272,24 +272,24 @@ export default function ProductionRole({ onBack, currentUser }: ProductionRolePr
     });
 
     // 2. Incrementar Stock de Producto Terminado
-    // Mapeamos de fórmula a producto terminado. Detergente Limón f-1 va a pt-1, Desengrasante f-2 va a pt-2
+    // Mapeamos de fórmula a producto terminado. Mezcla Pastel f-1 va a pt-1, Gelatina f-2 va a pt-2
     const ptId = formula.id === 'f-1' ? 'pt-1' : 'pt-2';
-    const totalPorronesProduced = 50 * multiplier; // Cada lote de 1000L da 50 porrones de 20L
+    const totalBolsasProduced = 100 * multiplier; // Cada lote de 100kg da 100 bolsas de 1kg
     const ptIdx = currentMaterials.findIndex(m => m.id === ptId);
     
     if (ptIdx !== -1) {
-      currentMaterials[ptIdx].stock += totalPorronesProduced;
+      currentMaterials[ptIdx].stock += totalBolsasProduced;
       currentMaterials[ptIdx].loteProveedor = finalLote;
       
       newMovements.push({
         id: `mov-${Date.now()}-pt`,
         materialId: ptId,
         type: 'entrada_compra', // Entrada por cierre de producción
-        quantity: totalPorronesProduced,
+        quantity: totalBolsasProduced,
         date: new Date().toISOString(),
         lote: finalLote,
         user: currentUser.name,
-        notes: `Cierre producción OP ${order.id}. +${totalPorronesProduced} porrones de 20L`
+        notes: `Cierre producción OP ${order.id}. +${totalBolsasProduced} bolsas de 1kg`
       });
     }
 
@@ -316,7 +316,7 @@ export default function ProductionRole({ onBack, currentUser }: ProductionRolePr
       currentUser.name,
       `Cerró orden de producción con éxito`,
       'Producción',
-      `Generado Lote interno: ${finalLote}. Se produjeron ${totalPorronesProduced} Porrones 20L.`
+      `Generado Lote interno: ${finalLote}. Se produjeron ${totalBolsasProduced} bolsas de 1kg.`
     );
 
     loadDatabase();
@@ -347,7 +347,7 @@ export default function ProductionRole({ onBack, currentUser }: ProductionRolePr
             <Beaker className="w-6 h-6 animate-pulse" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold tracking-tight">Laboratorio y Órdenes de Producción</h1>
+            <h1 className="text-xl font-semibold tracking-tight">Producción y Preparación de Mezclas</h1>
             <p className="text-xs text-slate-400">Operador activo: <span className="text-cyan-400 font-medium">{currentUser.name}</span></p>
           </div>
         </div>
@@ -356,7 +356,7 @@ export default function ProductionRole({ onBack, currentUser }: ProductionRolePr
           className="bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-4 py-2 rounded-lg text-sm transition-all shadow-sm border border-slate-700"
           id="btn_prod_logout"
         >
-          Cerrar Sesión Laboratorio
+          Cerrar Sesión Producción
         </button>
       </header>
 
@@ -382,7 +382,7 @@ export default function ProductionRole({ onBack, currentUser }: ProductionRolePr
           }`}
           id="tab_prod_formulas"
         >
-          Resguardo Confidencial de Fórmulas (BOM)
+          Catálogo y Registro de Recetas
         </button>
       </div>
 
@@ -651,31 +651,31 @@ export default function ProductionRole({ onBack, currentUser }: ProductionRolePr
                     <div className="flex justify-between items-start border-b border-slate-100 pb-4">
                       <div>
                         <span className="text-xs bg-cyan-100 text-cyan-800 font-bold px-2.5 py-0.5 rounded-full uppercase">
-                          Caja Fuerte Confidencial Lab
+                          Garantía de Calidad Repostería
                         </span>
                         <h2 className="text-lg font-bold text-slate-900 mt-2">{formula.name}</h2>
                         <p className="text-xs text-slate-500 mt-1">{formula.description}</p>
                       </div>
                       <div className="text-right">
-                        <span className="text-xs text-slate-500 font-semibold uppercase block">Costo BOM Total (1,000L)</span>
+                        <span className="text-xs text-slate-500 font-semibold uppercase block">Costo Total (Lote 100kg)</span>
                         <span className="text-2xl font-black text-slate-900">${totalBOMCost.toLocaleString('es-MX')} MXN</span>
-                        <span className="text-xs text-slate-500 block">Costo Unitario por Litro: ${(totalBOMCost / 1000).toFixed(2)} MXN</span>
-                        <span className="text-xs text-cyan-600 block font-semibold">Costo por Porrón 20L: ${(totalBOMCost / 50).toFixed(2)} MXN</span>
+                        <span className="text-xs text-slate-500 block">Costo Unitario por kg: ${(totalBOMCost / 100).toFixed(2)} MXN</span>
+                        <span className="text-xs text-cyan-600 block font-semibold">Costo por Bolsa 1kg: ${(totalBOMCost / 100).toFixed(2)} MXN</span>
                       </div>
                     </div>
 
-                    {/* Ingredientes Químicos Activos */}
+                    {/* Ingredientes de Repostería */}
                     <div>
                       <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center">
-                        <Layers className="w-4 h-4 mr-1 text-cyan-600" /> Ingredientes Activos (Porcentaje de Mezcla)
+                        <Layers className="w-4 h-4 mr-1 text-cyan-600" /> Ingredientes y Proporciones (Fórmula de Mezcla)
                       </h4>
                       <div className="border border-slate-100 rounded-lg overflow-hidden">
                         <table className="w-full text-left border-collapse text-xs">
                           <thead>
                             <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-100">
-                              <th className="p-3">Ingrediente Químico</th>
-                              <th className="p-3">Porcentaje Exacto (%)</th>
-                              <th className="p-3">Cantidad Requerida (1,000L)</th>
+                              <th className="p-3">Ingrediente / Materia Prima</th>
+                              <th className="p-3">Porcentaje exacto (%)</th>
+                              <th className="p-3">Cantidad Requerida (Lote)</th>
                               <th className="p-3">Costo Promedio Unitario</th>
                               <th className="p-3 text-right">Subtotal Insumo</th>
                             </tr>
@@ -734,11 +734,11 @@ export default function ProductionRole({ onBack, currentUser }: ProductionRolePr
                     {/* Costos Indirectos de Fabricación */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-lg">
                       <div className="flex justify-between items-center text-xs text-slate-600">
-                        <span>Costos de Mano de Obra (Operario Lab):</span>
+                        <span>Costos de Mano de Obra (Operario):</span>
                         <span className="font-bold text-slate-900">${formula.laborCost.toLocaleString('es-MX')}</span>
                       </div>
                       <div className="flex justify-between items-center text-xs text-slate-600">
-                        <span>Gastos Indirectos (Luz, Desmineralizadora, Depreciación):</span>
+                        <span>Gastos Indirectos (Luz, Equipos, Depreciación):</span>
                         <span className="font-bold text-slate-900">${formula.otherCost.toLocaleString('es-MX')}</span>
                       </div>
                     </div>

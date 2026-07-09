@@ -73,11 +73,11 @@ export default function AdminRole({ onBack, currentUser }: AdminRoleProps) {
 
   // Top 5 Productos más vendidos y rentabilidad (simulado en base a ventas actuales)
   const productPerformance = [
-    { name: 'Detergente Multiusos Limón 20L', salesQty: 85, profitMargin: '48%', totalRevenue: 49300 },
-    { name: 'Desengrasante Industrial Naranja 20L', salesQty: 52, profitMargin: '51%', totalRevenue: 35880 },
-    { name: 'Sosa Cáustica Concentrada L', salesQty: 30, profitMargin: '35%', totalRevenue: 15000 },
-    { name: 'Aroma Limón Concentrado kg', salesQty: 12, profitMargin: '60%', totalRevenue: 9800 },
-    { name: 'LESS 70% Activo kg', salesQty: 8, profitMargin: '25%', totalRevenue: 4800 },
+    { name: 'Mezcla Preparada para Pastel de Chocolate (Bolsa 1kg)', salesQty: 185, profitMargin: '48%', totalRevenue: 7770 },
+    { name: 'Polvo Preparado para Gelatina de Fresa (Bolsa 1kg)', salesQty: 125, profitMargin: '51%', totalRevenue: 6875 },
+    { name: 'Domo de Plástico para Pastel Grande', salesQty: 95, profitMargin: '45%', totalRevenue: 2280 },
+    { name: 'Esencia de Vainilla Concentrada L', salesQty: 42, profitMargin: '60%', totalRevenue: 3990 },
+    { name: 'Harina de Trigo Extra Fina kg', salesQty: 38, profitMargin: '30%', totalRevenue: 684 },
   ];
 
   // Handler para agregar empleado
@@ -476,7 +476,7 @@ export default function AdminRole({ onBack, currentUser }: AdminRoleProps) {
                       </div>
                       <div className="text-right">
                         <p className="text-sm font-bold text-slate-900">${p.totalRevenue.toLocaleString('es-MX')} MXN</p>
-                        <p className="text-xs text-slate-500">{p.salesQty} porrones</p>
+                        <p className="text-xs text-slate-500">{p.salesQty} bolsas / pzs</p>
                       </div>
                     </div>
                   ))}

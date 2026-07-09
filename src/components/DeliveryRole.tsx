@@ -125,7 +125,7 @@ export default function DeliveryRole({ onBack, currentUser }: DeliveryRoleProps)
 
   // Simular foto de recibo
   const simulatePhotoUpload = () => {
-    setPhotoEvidence('evidencia_porrones_entregados.jpg');
+    setPhotoEvidence('evidencia_bultos_entregados.jpg');
     alert('Foto de evidencia cargada exitosamente.');
   };
 

@@ -552,15 +552,12 @@ export default function WarehouseRole({ onBack, currentUser }: WarehouseRoleProp
                       {/* Safety Diamond and instructions */}
                       <div className="mt-4 bg-slate-50 p-2.5 rounded border border-slate-200 flex items-center justify-between text-[9px] text-slate-600 gap-3">
                         <div>
-                          <p className="font-bold text-slate-800">INDICACIONES DE SEGURIDAD (SGA):</p>
-                          <p className="mt-0.5">H314 Provoca quemaduras graves en la piel. P280 Llevar guantes y gafas protectoras de laboratorio.</p>
+                          <p className="font-bold text-slate-800">INDICACIONES DE CONSERVACIÓN (GRADO ALIMENTICIO):</p>
+                          <p className="mt-0.5">Mantener en un lugar fresco y seco, protegido de la luz directa y humedad. Almacenar sobre tarimas para evitar contaminación cruzada.</p>
                         </div>
-                        {/* Simulación Rombo NFPA 704 */}
-                        <div className="w-8 h-8 shrink-0 relative flex items-center justify-center font-bold">
-                          <div className="absolute top-0 w-3 h-3 bg-red-500 text-white text-[8px] flex items-center justify-center rounded">3</div>
-                          <div className="absolute left-0 w-3 h-3 bg-blue-500 text-white text-[8px] flex items-center justify-center rounded">2</div>
-                          <div className="absolute right-0 w-3 h-3 bg-yellow-400 text-slate-900 text-[8px] flex items-center justify-center rounded">1</div>
-                          <div className="absolute bottom-0 w-3 h-3 bg-white text-slate-950 text-[8px] flex items-center justify-center border border-slate-300 rounded">W</div>
+                        {/* Simulación Grado de Calidad */}
+                        <div className="bg-emerald-100 text-emerald-800 font-extrabold text-[10px] px-2 py-1 rounded shrink-0 border border-emerald-300">
+                          GRADO ALIMENTICIO
                         </div>
                       </div>
                     </div>
