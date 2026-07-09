@@ -9,16 +9,20 @@ import { RawMaterial, Formula, ProductionOrder, StockMovement, User } from '../t
 interface ProductionRoleProps {
   onBack: () => void;
   currentUser: User;
+  activeTab?: 'formulas' | 'orders';
+  setActiveTab?: (tab: 'formulas' | 'orders') => void;
 }
 
-export default function ProductionRole({ onBack, currentUser }: ProductionRoleProps) {
+export default function ProductionRole({ onBack, currentUser, activeTab: propsActiveTab, setActiveTab: propsSetActiveTab }: ProductionRoleProps) {
   // Database States
   const [formulas, setFormulas] = useState<Formula[]>([]);
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
   const [productionOrders, setProductionOrders] = useState<ProductionOrder[]>([]);
 
   // UI States
-  const [activeTab, setActiveTab] = useState<'formulas' | 'orders'>('orders');
+  const [internalActiveTab, setInternalActiveTab] = useState<'formulas' | 'orders'>('orders');
+  const activeTab = propsActiveTab || internalActiveTab;
+  const setActiveTab = propsSetActiveTab || setInternalActiveTab;
   const [selectedFormulaId, setSelectedFormulaId] = useState<string>('');
   
   // Create Order Form State

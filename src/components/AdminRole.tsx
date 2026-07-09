@@ -9,9 +9,11 @@ import { RawMaterial, Client, Sale, AuditLog, User, SystemConfig } from '../type
 interface AdminRoleProps {
   onBack: () => void;
   currentUser: User;
+  activeTab?: 'analytics' | 'finances' | 'config';
+  setActiveTab?: (tab: 'analytics' | 'finances' | 'config') => void;
 }
 
-export default function AdminRole({ onBack, currentUser }: AdminRoleProps) {
+export default function AdminRole({ onBack, currentUser, activeTab: propsActiveTab, setActiveTab: propsSetActiveTab }: AdminRoleProps) {
   // Database States
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -21,7 +23,9 @@ export default function AdminRole({ onBack, currentUser }: AdminRoleProps) {
   const [config, setConfig] = useState<SystemConfig | null>(null);
 
   // UI States
-  const [activeTab, setActiveTab] = useState<'analytics' | 'finances' | 'config'>('analytics');
+  const [internalActiveTab, setInternalActiveTab] = useState<'analytics' | 'finances' | 'config'>('analytics');
+  const activeTab = propsActiveTab || internalActiveTab;
+  const setActiveTab = propsSetActiveTab || setInternalActiveTab;
   const [chartPeriod, setChartPeriod] = useState<'daily' | 'monthly' | 'yearly'>('daily');
   
   // Create Employee Form State

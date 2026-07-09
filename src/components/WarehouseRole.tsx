@@ -9,15 +9,19 @@ import { RawMaterial, StockMovement, User } from '../types';
 interface WarehouseRoleProps {
   onBack: () => void;
   currentUser: User;
+  activeTab?: 'inventory' | 'traceability';
+  setActiveTab?: (tab: 'inventory' | 'traceability') => void;
 }
 
-export default function WarehouseRole({ onBack, currentUser }: WarehouseRoleProps) {
+export default function WarehouseRole({ onBack, currentUser, activeTab: propsActiveTab, setActiveTab: propsSetActiveTab }: WarehouseRoleProps) {
   // Database States
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
   const [movements, setMovements] = useState<StockMovement[]>([]);
 
   // UI States
-  const [activeTab, setActiveTab] = useState<'inventory' | 'traceability'>('inventory');
+  const [internalActiveTab, setInternalActiveTab] = useState<'inventory' | 'traceability'>('inventory');
+  const activeTab = propsActiveTab || internalActiveTab;
+  const setActiveTab = propsSetActiveTab || setInternalActiveTab;
   const [searchTerm, setSearchTerm] = useState('');
   
   // Modals States

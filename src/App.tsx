@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { 
-  Shield, Beaker, Package, ShoppingCart, Truck, RefreshCw, Home, LogOut
+  Shield, Beaker, Package, ShoppingCart, Truck, RefreshCw, Home, LogOut,
+  BarChart3, DollarSign, Settings, Activity, Layers, Users, FileCheck, MapPin
 } from 'lucide-react';
 import { MockDatabase } from './data';
 import { User, RoleType } from './types';
@@ -15,6 +16,7 @@ export default function App() {
   // Authentication & Active States
   const [activeRole, setActiveRole] = useState<RoleType | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [activeRoleTab, setActiveRoleTab] = useState<string>('analytics');
 
   // List of roles with their clean color configuration
   const rolesList = [
@@ -75,6 +77,31 @@ export default function App() {
     }
   ];
 
+  // Map of tabs for each active role
+  const tabsByRole: Record<RoleType, Array<{ id: string; label: string; shortLabel: string; icon: React.ComponentType<any> }>> = {
+    admin: [
+      { id: 'analytics', label: 'Dashboard', shortLabel: 'Dashboard', icon: BarChart3 },
+      { id: 'finances', label: 'Finanzas y Crédito', shortLabel: 'Finanzas', icon: DollarSign },
+      { id: 'config', label: 'Configuración', shortLabel: 'Ajustes', icon: Settings },
+    ],
+    production: [
+      { id: 'orders', label: 'Órdenes de Prod.', shortLabel: 'Órdenes', icon: Activity },
+      { id: 'formulas', label: 'Catálogo de Recetas', shortLabel: 'Recetas', icon: Layers },
+    ],
+    warehouse: [
+      { id: 'inventory', label: 'Inventario Insumos', shortLabel: 'Stock', icon: Package },
+      { id: 'traceability', label: 'Kárdex / Historial', shortLabel: 'Kárdex', icon: RefreshCw },
+    ],
+    sales: [
+      { id: 'pos', label: 'Punto de Venta', shortLabel: 'Caja', icon: ShoppingCart },
+      { id: 'crm', label: 'Clientes y Créditos', shortLabel: 'Clientes', icon: Users },
+      { id: 'cobranza', label: 'Cobros y Remisiones', shortLabel: 'Cobros', icon: FileCheck },
+    ],
+    delivery: [
+      { id: 'routes', label: 'Rutas de Entrega', shortLabel: 'Rutas', icon: MapPin },
+    ],
+  };
+
   // Handler for direct role navigation without credentials
   const handleRoleClick = (roleType: RoleType) => {
     const allUsers = MockDatabase.getUsers();
@@ -82,6 +109,13 @@ export default function App() {
     if (matchUser) {
       setCurrentUser(matchUser);
       setActiveRole(roleType);
+
+      // Set default tab for selected role
+      if (roleType === 'admin') setActiveRoleTab('analytics');
+      else if (roleType === 'production') setActiveRoleTab('orders');
+      else if (roleType === 'warehouse') setActiveRoleTab('inventory');
+      else if (roleType === 'sales') setActiveRoleTab('pos');
+      else if (roleType === 'delivery') setActiveRoleTab('routes');
       
       // Log event to Audits
       MockDatabase.addAuditLog(
@@ -116,13 +150,13 @@ export default function App() {
     if (!activeRole || !currentUser) return null;
     switch (activeRole) {
       case 'admin':
-        return <AdminRole onBack={handleLogout} currentUser={currentUser} />;
+        return <AdminRole onBack={handleLogout} currentUser={currentUser} activeTab={activeRoleTab as any} setActiveTab={setActiveRoleTab as any} />;
       case 'production':
-        return <ProductionRole onBack={handleLogout} currentUser={currentUser} />;
+        return <ProductionRole onBack={handleLogout} currentUser={currentUser} activeTab={activeRoleTab as any} setActiveTab={setActiveRoleTab as any} />;
       case 'warehouse':
-        return <WarehouseRole onBack={handleLogout} currentUser={currentUser} />;
+        return <WarehouseRole onBack={handleLogout} currentUser={currentUser} activeTab={activeRoleTab as any} setActiveTab={setActiveRoleTab as any} />;
       case 'sales':
-        return <SalesRole onBack={handleLogout} currentUser={currentUser} />;
+        return <SalesRole onBack={handleLogout} currentUser={currentUser} activeTab={activeRoleTab as any} setActiveTab={setActiveRoleTab as any} />;
       case 'delivery':
         return <DeliveryRole onBack={handleLogout} currentUser={currentUser} />;
       default:
@@ -236,31 +270,33 @@ export default function App() {
             </div>
           </div>
 
-          {/* Direct Role Switching Menu */}
+          {/* Sub-modules for the Active Role */}
           <div className="p-4 flex flex-col gap-1">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-2 mb-2">
-              Navegación de Roles
+              Módulos {activeRole ? `- ${rolesList.find(r => r.type === activeRole)?.title}` : ''}
             </span>
 
-            {rolesList.map((role) => {
-              const IconComponent = role.icon;
-              const isActive = activeRole === role.type;
+            {(activeRole ? tabsByRole[activeRole] : []).map((tab) => {
+              const IconComponent = tab.icon;
+              const isActive = activeRoleTab === tab.id;
+              const activeRoleColor = rolesList.find(r => r.type === activeRole);
               return (
                 <button
-                  key={role.type}
-                  onClick={() => handleDirectSwitch(role.type)}
+                  key={tab.id}
+                  onClick={() => setActiveRoleTab(tab.id)}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold uppercase tracking-wider transition-all cursor-pointer ${
                     isActive 
                       ? 'bg-slate-900 text-white shadow-xs' 
                       : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                   }`}
+                  id={`tab_nav_sidebar_${tab.id}`}
                 >
                   <div className={`p-1.5 rounded-lg shrink-0 ${
-                    isActive ? 'bg-slate-800 text-white' : role.bgLight + ' ' + role.inactiveColor.split(' ')[0]
+                    isActive ? 'bg-slate-800 text-white' : (activeRoleColor?.bgLight || 'bg-slate-50') + ' ' + (activeRoleColor?.inactiveColor.split(' ')[0] || 'text-slate-500')
                   }`}>
                     <IconComponent className="w-4 h-4" />
                   </div>
-                  <span>{role.title}</span>
+                  <span>{tab.label}</span>
                 </button>
               );
             })}
@@ -297,24 +333,26 @@ export default function App() {
 
       {/* 4. MOBILE/TABLET BOTTOM NAVIGATION BAR (lg:hidden) */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-slate-200 z-50 flex items-center justify-around px-2 shadow-lg shrink-0">
-        {rolesList.map((role) => {
-          const IconComponent = role.icon;
-          const isActive = activeRole === role.type;
+        {(activeRole ? tabsByRole[activeRole] : []).map((tab) => {
+          const IconComponent = tab.icon;
+          const isActive = activeRoleTab === tab.id;
+          const activeRoleColor = rolesList.find(r => r.type === activeRole);
           return (
             <button
-              key={role.type}
-              onClick={() => handleDirectSwitch(role.type)}
+              key={tab.id}
+              onClick={() => setActiveRoleTab(tab.id)}
               className={`flex flex-col items-center justify-center flex-1 h-full py-1 text-center transition-all ${
                 isActive ? 'text-slate-900 font-bold scale-105' : 'text-slate-400 hover:text-slate-600'
               }`}
+              id={`tab_nav_bottom_${tab.id}`}
             >
               <div className={`p-1.5 rounded-lg ${
-                isActive ? role.colorClass : 'bg-transparent'
+                isActive ? (activeRoleColor?.colorClass || 'bg-slate-900 text-white') : 'bg-transparent'
               }`}>
                 <IconComponent className="w-4 h-4" />
               </div>
               <span className="text-[9px] font-semibold uppercase tracking-wider mt-1">
-                {role.shortLabel}
+                {tab.shortLabel}
               </span>
             </button>
           );

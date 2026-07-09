@@ -9,16 +9,20 @@ import { RawMaterial, Client, Sale, OrderItem, DeliveryRoute, User } from '../ty
 interface SalesRoleProps {
   onBack: () => void;
   currentUser: User;
+  activeTab?: 'pos' | 'crm' | 'cobranza';
+  setActiveTab?: (tab: 'pos' | 'crm' | 'cobranza') => void;
 }
 
-export default function SalesRole({ onBack, currentUser }: SalesRoleProps) {
+export default function SalesRole({ onBack, currentUser, activeTab: propsActiveTab, setActiveTab: propsSetActiveTab }: SalesRoleProps) {
   // Database States
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
 
   // UI States
-  const [activeTab, setActiveTab] = useState<'pos' | 'crm' | 'cobranza'>('pos');
+  const [internalActiveTab, setInternalActiveTab] = useState<'pos' | 'crm' | 'cobranza'>('pos');
+  const activeTab = propsActiveTab || internalActiveTab;
+  const setActiveTab = propsSetActiveTab || setInternalActiveTab;
   
   // POS Cart State
   const [cartClientId, setCartClientId] = useState('');
