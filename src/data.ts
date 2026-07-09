@@ -1,4 +1,4 @@
-import { RawMaterial, Formula, ProductionOrder, StockMovement, Client, Sale, DeliveryRoute, AuditLog, User, SystemConfig } from './types';
+import { RawMaterial, Formula, ProductionOrder, StockMovement, Client, Sale, DeliveryRoute, AuditLog, User, SystemConfig, PurchaseOrder } from './types';
 
 export const INITIAL_USERS: User[] = [
   { id: 'u-1', name: 'Jonathan (Gerente)', username: 'jonathan', role: 'admin', pin: '1111', active: true, permissions: ['dashboard', 'finanzas', 'configuracion'] },
@@ -187,6 +187,35 @@ export const INITIAL_SYSTEM_CONFIG: SystemConfig = {
   creditDaysAllowed: 60,
 };
 
+export const INITIAL_PURCHASE_ORDERS: PurchaseOrder[] = [
+  {
+    id: 'oc-1',
+    supplierName: 'Distribuidora Harinera del Centro',
+    items: [
+      { materialId: 'mat-1', materialName: 'Harina de Trigo Extra Fina', quantity: 1000, unitPrice: 15.0, total: 15000 }
+    ],
+    subtotal: 15000,
+    tax: 0,
+    total: 15000,
+    status: 'received',
+    createdAt: '2026-07-01T09:00:00Z',
+    receivedAt: '2026-07-01T14:00:00Z',
+    invoiceNumber: 'FAC-8892'
+  },
+  {
+    id: 'oc-2',
+    supplierName: 'Grenetinas Premium de Occidente',
+    items: [
+      { materialId: 'mat-3', materialName: 'Grenetina Hidrolizada 290 Bloom', quantity: 200, unitPrice: 125.0, total: 25000 }
+    ],
+    subtotal: 25000,
+    tax: 0,
+    total: 25000,
+    status: 'ordered',
+    createdAt: '2026-07-08T10:00:00Z'
+  }
+];
+
 export class MockDatabase {
   static get<T>(key: string, defaultValue: T): T {
     try {
@@ -288,6 +317,14 @@ export class MockDatabase {
 
   static saveSystemConfig(data: SystemConfig) {
     this.set('system_config', data);
+  }
+
+  static getPurchaseOrders(): PurchaseOrder[] {
+    return this.get<PurchaseOrder[]>('purchase_orders', INITIAL_PURCHASE_ORDERS);
+  }
+
+  static savePurchaseOrders(data: PurchaseOrder[]) {
+    this.set('purchase_orders', data);
   }
 
   static addAuditLog(user: string, action: string, module: string, details: string) {

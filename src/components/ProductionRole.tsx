@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Beaker, ClipboardList, Check, AlertCircle, Plus, Info, 
-  Layers, Package, BadgeAlert, UserCheck, Calendar 
+  Layers, Package, BadgeAlert, UserCheck, Calendar, Activity, FileCheck, ShoppingCart, Trash2
 } from 'lucide-react';
 import { MockDatabase } from '../data';
 import { RawMaterial, Formula, ProductionOrder, StockMovement, User } from '../types';
@@ -9,8 +9,8 @@ import { RawMaterial, Formula, ProductionOrder, StockMovement, User } from '../t
 interface ProductionRoleProps {
   onBack: () => void;
   currentUser: User;
-  activeTab?: 'formulas' | 'orders';
-  setActiveTab?: (tab: 'formulas' | 'orders') => void;
+  activeTab?: 'formulas' | 'orders' | 'mrp';
+  setActiveTab?: (tab: 'formulas' | 'orders' | 'mrp') => void;
 }
 
 export default function ProductionRole({ onBack, currentUser, activeTab: propsActiveTab, setActiveTab: propsSetActiveTab }: ProductionRoleProps) {
@@ -20,18 +20,29 @@ export default function ProductionRole({ onBack, currentUser, activeTab: propsAc
   const [productionOrders, setProductionOrders] = useState<ProductionOrder[]>([]);
 
   // UI States
-  const [internalActiveTab, setInternalActiveTab] = useState<'formulas' | 'orders'>('orders');
+  const [internalActiveTab, setInternalActiveTab] = useState<'formulas' | 'orders' | 'mrp'>('orders');
   const activeTab = propsActiveTab || internalActiveTab;
   const setActiveTab = propsSetActiveTab || setInternalActiveTab;
   const [selectedFormulaId, setSelectedFormulaId] = useState<string>('');
   
   // Create Order Form State
   const [createOrderFormulaId, setCreateOrderFormulaId] = useState('');
-  const [createOrderQty, setCreateOrderQty] = useState(1000); // multiple of 1000
+  const [createOrderQty, setCreateOrderQty] = useState(100); // changed default to match 100kg batch
   const [createOrderNotes, setCreateOrderNotes] = useState('');
 
   // Selected Order for Pre-check Detail Modal
   const [selectedOrder, setSelectedOrder] = useState<ProductionOrder | null>(null);
+
+  // MRP State variables
+  const [mrpFormulaId, setMrpFormulaId] = useState('');
+  const [mrpBatchQty, setMrpBatchQty] = useState(100);
+
+  // QA Modal State variables
+  const [qaPh, setQaPh] = useState(6.5);
+  const [qaDensity, setQaDensity] = useState(1.05);
+  const [qaSensory, setQaSensory] = useState(false);
+  const [qaSealing, setQaSealing] = useState(false);
+  const [qaOrderId, setQaOrderId] = useState<string | null>(null);
 
   // Load database
   const loadDatabase = () => {
@@ -328,6 +339,125 @@ export default function ProductionRole({ onBack, currentUser, activeTab: propsAc
     alert(`Órden cerrada exitosamente. Lote interno generado: ${finalLote}. Se han descontado los insumos e incrementado el producto terminado.`);
   };
 
+  const handleCloseProductionWithQA = (order: ProductionOrder, qa: { ph: number, density: number, sensoryPassed: boolean, sealingPassed: boolean }) => {
+    const formula = formulas.find(f => f.id === order.formulaId);
+    if (!formula) return;
+
+    const multiplier = order.quantityLiters / formula.batchSizeLiters;
+    const finalLote = `LOTE-INT-${Math.floor(100 + Math.random() * 900)}`;
+
+    // 1. Descontar materias primas y empaques
+    const currentMaterials = [...materials];
+    const newMovements: StockMovement[] = [];
+
+    // Ingredientes
+    formula.ingredients.forEach(ing => {
+      const required = ing.amountPerThousandLiters * multiplier;
+      const matIdx = currentMaterials.findIndex(m => m.id === ing.materialId);
+      if (matIdx !== -1) {
+        currentMaterials[matIdx].stock = Math.max(0, currentMaterials[matIdx].stock - required);
+        
+        newMovements.push({
+          id: `mov-${Date.now()}-${ing.materialId}`,
+          materialId: ing.materialId,
+          type: 'salida_produccion',
+          quantity: required,
+          date: new Date().toISOString(),
+          lote: finalLote,
+          user: currentUser.name,
+          notes: `Consumo dosificación para OP ${order.id} (Liberado por Control de Calidad)`
+        });
+      }
+    });
+
+    // Empaques
+    formula.packaging.forEach(pkg => {
+      const required = pkg.quantity * multiplier;
+      const matIdx = currentMaterials.findIndex(m => m.id === pkg.materialId);
+      if (matIdx !== -1) {
+        currentMaterials[matIdx].stock = Math.max(0, currentMaterials[matIdx].stock - required);
+        
+        newMovements.push({
+          id: `mov-${Date.now()}-${pkg.materialId}`,
+          materialId: pkg.materialId,
+          type: 'salida_produccion',
+          quantity: required,
+          date: new Date().toISOString(),
+          lote: finalLote,
+          user: currentUser.name,
+          notes: `Empacado y sellado para OP ${order.id} (Liberado por Control de Calidad)`
+        });
+      }
+    });
+
+    // 2. Incrementar Stock de Producto Terminado
+    const ptId = formula.id === 'f-1' ? 'pt-1' : 'pt-2';
+    const totalBolsasProduced = 100 * multiplier; // Cada lote de 100kg da 100 bolsas de 1kg
+    const ptIdx = currentMaterials.findIndex(m => m.id === ptId);
+    
+    if (ptIdx !== -1) {
+      currentMaterials[ptIdx].stock += totalBolsasProduced;
+      currentMaterials[ptIdx].loteProveedor = finalLote;
+      
+      newMovements.push({
+        id: `mov-${Date.now()}-pt`,
+        materialId: ptId,
+        type: 'entrada_compra', 
+        quantity: totalBolsasProduced,
+        date: new Date().toISOString(),
+        lote: finalLote,
+        user: currentUser.name,
+        notes: `Liberación Control de Calidad OP ${order.id}. +${totalBolsasProduced} bolsas de 1kg`
+      });
+    }
+
+    // Guardar cambios de materiales y movimientos en base de datos
+    MockDatabase.saveRawMaterials(currentMaterials);
+    const databaseMovements = MockDatabase.getStockMovements();
+    MockDatabase.saveStockMovements([...newMovements, ...databaseMovements]);
+
+    // 3. Completar órden de producción con info de QA
+    const updatedOrders = productionOrders.map(o => {
+      if (o.id === order.id) {
+        return {
+          ...o,
+          status: 'completed' as const,
+          completedAt: new Date().toISOString(),
+          lote: finalLote,
+          qaCheck: {
+            id: `qa-${Date.now().toString().slice(-4)}`,
+            ph: qa.ph,
+            density: qa.density,
+            sensoryPassed: qa.sensoryPassed,
+            sealingPassed: qa.sealingPassed,
+            passed: qa.sensoryPassed && qa.sealingPassed,
+            notes: `Liberado por ${currentUser.name}. pH: ${qa.ph}, Densidad: ${qa.density} g/cm³. Humedad y color correctos.`,
+            checkedBy: currentUser.name,
+            date: new Date().toISOString()
+          }
+        };
+      }
+      return o;
+    });
+
+    MockDatabase.saveProductionOrders(updatedOrders);
+
+    MockDatabase.addAuditLog(
+      currentUser.name,
+      `Aprobó Control de Calidad y liberó lote ${finalLote}`,
+      'Control de Calidad (QA/QC)',
+      `Análisis: pH ${qa.ph}, Densidad ${qa.density}. Evaluación sensorial y de empaque CUMPLIDA. Lote disponible para venta.`
+    );
+
+    loadDatabase();
+    setQaOrderId(null);
+    setQaPh(6.5);
+    setQaDensity(1.05);
+    setQaSensory(false);
+    setQaSealing(false);
+    alert(`¡Control de Calidad Aprobado! El lote ${finalLote} ha sido liberado oficialmente y cargado al inventario de ventas.`);
+  };
+
   const getFormulaCost = (formula: Formula) => {
     const ingCost = formula.ingredients.reduce((acc, ing) => {
       const mat = materials.find(m => m.id === ing.materialId);
@@ -387,6 +517,17 @@ export default function ProductionRole({ onBack, currentUser, activeTab: propsAc
           id="tab_prod_formulas"
         >
           Catálogo y Registro de Recetas
+        </button>
+        <button
+          onClick={() => setActiveTab('mrp')}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center ${
+            activeTab === 'mrp' 
+              ? 'bg-slate-900 text-white' 
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+          id="tab_prod_mrp"
+        >
+          <Activity className="w-4 h-4 mr-1.5 text-indigo-500 animate-pulse" /> Explosión de Materiales (MRP)
         </button>
       </div>
 
@@ -508,10 +649,10 @@ export default function ProductionRole({ onBack, currentUser, activeTab: propsAc
 
                         {order.status === 'in_progress' && (
                           <button
-                            onClick={() => handleCloseProduction(order)}
-                            className="bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-all"
+                            onClick={() => setQaOrderId(order.id)}
+                            className="bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-all flex items-center"
                           >
-                            Registrar Cierre y Lote
+                            <FileCheck className="w-4 h-4 mr-1 animate-pulse" /> Validar Control de Calidad y Cerrar
                           </button>
                         )}
                       </div>
@@ -755,6 +896,255 @@ export default function ProductionRole({ onBack, currentUser, activeTab: propsAc
           </div>
         )}
 
+        {/* TAB 3: MRP SIMULATOR */}
+        {activeTab === 'mrp' && (
+          <div className="space-y-6">
+            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center">
+                <Activity className="w-5 h-5 mr-2 text-indigo-600 animate-pulse" /> Planificación de Requerimiento de Materiales (MRP - Explosión de Insumos)
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Realiza una simulación de explosión de materiales para planificar futuras órdenes de fabricación. El sistema calcula en tiempo real si el inventario actual es suficiente o si es necesario emitir órdenes de compra.
+              </p>
+
+              <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Receta / Fórmula Objetivo</label>
+                  <select
+                    value={mrpFormulaId}
+                    onChange={(e) => setMrpFormulaId(e.target.value)}
+                    className="w-full text-xs bg-white border border-slate-200 rounded-lg p-2 font-semibold"
+                  >
+                    <option value="">-- Elige una Receta --</option>
+                    {formulas.map(f => (
+                      <option key={f.id} value={f.id}>{f.name} (Lote Estándar: {f.batchSizeLiters}kg)</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Cantidad a Producir (kg)</label>
+                  <input
+                    type="number"
+                    value={mrpBatchQty}
+                    onChange={(e) => setMrpBatchQty(Number(e.target.value))}
+                    className="w-full text-xs bg-white border border-slate-200 rounded-lg p-2 font-mono font-bold font-semibold"
+                    min="1"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <button
+                    onClick={() => {
+                      if (!mrpFormulaId) alert('Por favor, selecciona una fórmula.');
+                    }}
+                    className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2 rounded-lg text-xs font-semibold"
+                  >
+                    Simular Requerimiento MRP
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {(() => {
+              const selectedFormula = formulas.find(f => f.id === mrpFormulaId);
+              if (!selectedFormula) {
+                return (
+                  <div className="bg-white p-12 rounded-xl border border-slate-200 text-center text-slate-400">
+                    <Layers className="w-16 h-16 mx-auto text-slate-300 mb-3" />
+                    <p className="font-semibold text-slate-700">Explosión de Materiales Interactiva</p>
+                    <p className="text-xs mt-1">Selecciona una receta y define la escala del lote arriba para ver la simulación MRP.</p>
+                  </div>
+                );
+              }
+
+              const multiplier = mrpBatchQty / selectedFormula.batchSizeLiters;
+              let hasShortages = false;
+              const shortagesList: { materialId: string, quantity: number, price: number }[] = [];
+
+              const mrpItems = [
+                ...selectedFormula.ingredients.map(ing => {
+                  const required = ing.amountPerThousandLiters * multiplier;
+                  const mat = materials.find(m => m.id === ing.materialId);
+                  const available = mat ? mat.stock : 0;
+                  const isSufficient = available >= required;
+                  const deficit = isSufficient ? 0 : required - available;
+                  if (!isSufficient) {
+                    hasShortages = true;
+                    shortagesList.push({ materialId: ing.materialId, quantity: deficit, price: mat ? mat.costPerUnit : 15 });
+                  }
+
+                  return {
+                    id: ing.materialId,
+                    name: mat ? mat.name : 'Insumo',
+                    sku: mat ? mat.sku : 'SKU',
+                    unit: mat ? mat.unit : 'kg',
+                    required,
+                    available,
+                    deficit,
+                    isSufficient
+                  };
+                }),
+                ...selectedFormula.packaging.map(pkg => {
+                  const required = pkg.quantity * multiplier;
+                  const mat = materials.find(m => m.id === pkg.materialId);
+                  const available = mat ? mat.stock : 0;
+                  const isSufficient = available >= required;
+                  const deficit = isSufficient ? 0 : required - available;
+                  if (!isSufficient) {
+                    hasShortages = true;
+                    shortagesList.push({ materialId: pkg.materialId, quantity: deficit, price: pkg.cost });
+                  }
+
+                  return {
+                    id: pkg.materialId,
+                    name: mat ? mat.name : 'Empaque',
+                    sku: mat ? mat.sku : 'SKU',
+                    unit: mat ? mat.unit : 'pzs',
+                    required,
+                    available,
+                    deficit,
+                    isSufficient
+                  };
+                })
+              ];
+
+              return (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  
+                  {/* MRP Ingredients Table */}
+                  <div className="lg:col-span-2 space-y-4">
+                    <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                      <div className="flex justify-between items-center mb-4">
+                        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center">
+                          <Layers className="w-4 h-4 mr-1 text-slate-600" /> Resultados del Análisis MRP ({selectedFormula.name})
+                        </h4>
+                        <span className="font-mono text-[10px] text-slate-400">Escala: x{multiplier.toFixed(2)}</span>
+                      </div>
+
+                      <div className="border border-slate-200 rounded-lg overflow-hidden">
+                        <table className="w-full text-left border-collapse text-xs">
+                          <thead>
+                            <tr className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200 uppercase text-[9px]">
+                              <th className="p-2.5">SKU / Insumo</th>
+                              <th className="p-2.5 text-center">Requerido</th>
+                              <th className="p-2.5 text-center">Disponible</th>
+                              <th className="p-2.5 text-center">Faltante</th>
+                              <th className="p-2.5 text-center">Estatus</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {mrpItems.map(item => (
+                              <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50">
+                                <td className="p-2.5">
+                                  <span className="font-mono text-[10px] font-bold text-slate-400 block">{item.sku}</span>
+                                  <span className="font-semibold text-slate-900">{item.name}</span>
+                                </td>
+                                <td className="p-2.5 text-center font-mono font-bold text-slate-800">{item.required.toFixed(1)} {item.unit}</td>
+                                <td className="p-2.5 text-center font-mono text-slate-500">{item.available.toFixed(1)} {item.unit}</td>
+                                <td className="p-2.5 text-center font-mono font-bold text-red-600">
+                                  {item.deficit > 0 ? `${item.deficit.toFixed(1)} ${item.unit}` : '0.0'}
+                                </td>
+                                <td className="p-2.5 text-center">
+                                  {item.isSufficient ? (
+                                    <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full uppercase">Suficiente</span>
+                                  ) : (
+                                    <span className="text-[9px] font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-full uppercase">Abastecer</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Sugerencias de Abastecimiento */}
+                  <div className="space-y-4">
+                    <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                      <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center">
+                        <BadgeAlert className="w-4 h-4 mr-1.5 text-indigo-600" /> Plan de Acción MRP
+                      </h4>
+
+                      {!hasShortages ? (
+                        <div className="bg-emerald-50 text-emerald-800 p-4 rounded-xl border border-emerald-100 space-y-2">
+                          <p className="font-bold text-xs flex items-center"><Check className="w-4 h-4 mr-1" /> ¡Viabilidad Completa!</p>
+                          <p className="text-[11px]">Tienes suficiente materia prima y empaque en Almacén para lanzar esta orden de {mrpBatchQty}kg de inmediato.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="bg-rose-50 text-rose-800 p-4 rounded-xl border border-rose-100 space-y-1">
+                            <p className="font-bold text-xs flex items-center"><AlertCircle className="w-4 h-4 mr-1 text-rose-600" /> Desabasto Detectado</p>
+                            <p className="text-[11px]">No se cuenta con los insumos suficientes para completar este lote. Es necesario realizar compras previas.</p>
+                          </div>
+
+                          <div className="border border-slate-200 rounded-xl p-4 space-y-3 font-semibold">
+                            <span className="text-[10px] font-bold uppercase text-slate-400 block font-semibold">Sugerencia de Abastecimiento</span>
+                            <div className="space-y-2">
+                              {shortagesList.map((short, i) => {
+                                const m = materials.find(mat => mat.id === short.materialId);
+                                return (
+                                  <div key={i} className="flex justify-between text-xs font-semibold text-slate-700">
+                                    <span>{m?.name}</span>
+                                    <span className="font-mono text-rose-600">+{short.quantity.toFixed(1)} {m?.unit}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            <button
+                              onClick={() => {
+                                // Crear la orden de compra automáticamente en la base de datos!
+                                const poItemsFormatted = shortagesList.map(short => {
+                                  const m = materials.find(mat => mat.id === short.materialId);
+                                  return {
+                                    materialId: short.materialId,
+                                    materialName: m ? m.name : 'Insumo',
+                                    quantity: Math.ceil(short.quantity * 1.2), // Agregar un 20% de seguridad
+                                    unitPrice: short.price,
+                                    total: Math.ceil(short.quantity * 1.2) * short.price
+                                  };
+                                });
+
+                                const subtotal = poItemsFormatted.reduce((a, b) => a + b.total, 0);
+                                const newPo: any = {
+                                  id: `oc-mrp-${Date.now().toString().slice(-4)}`,
+                                  supplierName: 'Distribuidora Harinera del Centro',
+                                  items: poItemsFormatted,
+                                  subtotal,
+                                  tax: 0,
+                                  total: subtotal,
+                                  status: 'draft',
+                                  createdAt: new Date().toISOString()
+                                };
+
+                                const existingPOs = MockDatabase.getPurchaseOrders();
+                                MockDatabase.savePurchaseOrders([newPo, ...existingPOs]);
+
+                                MockDatabase.addAuditLog(
+                                  currentUser.name,
+                                  `Creó Orden de Compra Automática por MRP`,
+                                  'Abastecimiento / Compras',
+                                  `Orden ${newPo.id} sugerida por explosión de materiales para receta ${selectedFormula.name}.`
+                                );
+
+                                alert(`¡Orden de compra sugerida generada con éxito en estatus Borrador! Folio: ${newPo.id}. El rol de Almacén ya la tiene disponible para validación.`);
+                              }}
+                              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-lg text-xs mt-2 shadow-xs flex items-center justify-center transition-all font-semibold"
+                            >
+                              <ShoppingCart className="w-3.5 h-3.5 mr-1" /> Generar OC en Almacén
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
       </main>
 
       {/* Pre-check Validation Modal */}
@@ -857,6 +1247,124 @@ export default function ProductionRole({ onBack, currentUser, activeTab: propsAc
           </div>
         </div>
       )}
+
+      {/* QA Checklist Modal */}
+      {qaOrderId && (() => {
+        const targetOrder = productionOrders.find(o => o.id === qaOrderId);
+        const formula = targetOrder ? formulas.find(f => f.id === targetOrder.formulaId) : null;
+        if (!targetOrder) return null;
+
+        return (
+          <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 animate-fade-in">
+            <div className="bg-white rounded-xl shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden text-slate-700">
+              <div className="bg-indigo-900 text-white p-4 flex justify-between items-center">
+                <div className="flex items-center space-x-2">
+                  <FileCheck className="w-5 h-5 text-indigo-300" />
+                  <div>
+                    <h3 className="font-bold text-sm">Control de Calidad (HACCP)</h3>
+                    <p className="text-[10px] text-indigo-200">Validación de inocuidad y empaque antes de liberación.</p>
+                  </div>
+                </div>
+                <button onClick={() => setQaOrderId(null)} className="text-indigo-200 hover:text-white">✕</button>
+              </div>
+
+              <div className="p-5 space-y-4 text-xs font-semibold">
+                <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                  <p className="font-bold text-slate-900 text-xs">Orden a Liberar: {targetOrder.id}</p>
+                  <p className="text-[11px] text-slate-500">Receta: {formula?.name}</p>
+                  <p className="text-[11px] text-slate-500">Cantidad Lote: {targetOrder.quantityLiters} kg</p>
+                </div>
+
+                {/* pH Slider */}
+                <div className="space-y-1">
+                  <div className="flex justify-between">
+                    <label className="font-bold text-slate-600">Medición de pH (Rango Aceptado: 5.5 - 7.5)</label>
+                    <span className="font-mono text-indigo-600 font-bold">{qaPh}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="4.0"
+                    max="9.0"
+                    step="0.1"
+                    value={qaPh}
+                    onChange={(e) => setQaPh(Number(e.target.value))}
+                    className="w-full accent-indigo-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"
+                  />
+                  <div className="flex justify-between text-[9px] text-slate-400 font-mono">
+                    <span>Ácido (4.0)</span>
+                    <span className="text-emerald-600 font-bold">Ideal (6.5)</span>
+                    <span>Alcalino (9.0)</span>
+                  </div>
+                </div>
+
+                {/* Density Input */}
+                <div>
+                  <label className="block font-bold text-slate-600 mb-1">Densidad Relativa (g/cm³)</label>
+                  <input
+                    type="number"
+                    min="0.5"
+                    max="2.0"
+                    step="0.01"
+                    value={qaDensity}
+                    onChange={(e) => setQaDensity(Number(e.target.value))}
+                    className="w-full text-sm bg-white border border-slate-200 rounded-lg p-2 font-mono font-bold"
+                    required
+                  />
+                </div>
+
+                {/* Checklist options */}
+                <div className="space-y-2.5 pt-2">
+                  <label className="block font-bold text-slate-800 uppercase tracking-wider text-[9px]">Puntos Críticos de Control (CCP)</label>
+                  
+                  <label className="flex items-start space-x-2.5 p-2 rounded border border-slate-100 hover:bg-slate-50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={qaSensory}
+                      onChange={(e) => setQaSensory(e.target.checked)}
+                      className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4 border-slate-300"
+                    />
+                    <div>
+                      <p className="font-bold text-slate-800">Evaluación Sensorial Cumplida</p>
+                      <p className="text-[10px] text-slate-400">Color, textura uniforme, sabor e higroscopicidad correctos de la mezcla.</p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start space-x-2.5 p-2 rounded border border-slate-100 hover:bg-slate-50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={qaSealing}
+                      onChange={(e) => setQaSealing(e.target.checked)}
+                      className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4 border-slate-300"
+                    />
+                    <div>
+                      <p className="font-bold text-slate-800">Prueba de Sellado y Loteado Correcto</p>
+                      <p className="text-[10px] text-slate-400">Las bolsas selladoras no tienen fisuras. Código de lote impreso correctamente.</p>
+                    </div>
+                  </label>
+                </div>
+
+                {/* Action button */}
+                <button
+                  onClick={() => {
+                    if (!qaSensory || !qaSealing) {
+                      alert('Error: Todos los Puntos Críticos de Control (CCP) deben ser verificados y aprobados para poder liberar el lote al almacén.');
+                      return;
+                    }
+                    if (qaPh < 5.5 || qaPh > 7.5) {
+                      alert('Error: El pH medido está fuera del rango de tolerancia inocua (5.5 - 7.5). El lote debe ser retenido.');
+                      return;
+                    }
+                    handleCloseProductionWithQA(targetOrder, { ph: qaPh, density: qaDensity, sensoryPassed: qaSensory, sealingPassed: qaSealing });
+                  }}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-lg text-xs mt-4 shadow-md flex items-center justify-center transition-all"
+                >
+                  <Check className="w-4 h-4 mr-1.5" /> Aprobar y Liberar Lote a Ventas
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );

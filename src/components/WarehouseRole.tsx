@@ -1,25 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Package, ArrowDownLeft, ArrowUpRight, AlertOctagon, Calendar, 
-  Printer, QrCode, Search, RefreshCw, Plus, Trash2, UserCheck, ShieldAlert 
+  Printer, QrCode, Search, RefreshCw, Plus, Trash2, UserCheck, ShieldAlert,
+  ShoppingCart, FileText, CheckCircle
 } from 'lucide-react';
 import { MockDatabase } from '../data';
-import { RawMaterial, StockMovement, User } from '../types';
+import { RawMaterial, StockMovement, User, PurchaseOrder } from '../types';
 
 interface WarehouseRoleProps {
   onBack: () => void;
   currentUser: User;
-  activeTab?: 'inventory' | 'traceability';
-  setActiveTab?: (tab: 'inventory' | 'traceability') => void;
+  activeTab?: 'inventory' | 'traceability' | 'purchasing';
+  setActiveTab?: (tab: 'inventory' | 'traceability' | 'purchasing') => void;
 }
 
 export default function WarehouseRole({ onBack, currentUser, activeTab: propsActiveTab, setActiveTab: propsSetActiveTab }: WarehouseRoleProps) {
   // Database States
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
   const [movements, setMovements] = useState<StockMovement[]>([]);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
 
   // UI States
-  const [internalActiveTab, setInternalActiveTab] = useState<'inventory' | 'traceability'>('inventory');
+  const [internalActiveTab, setInternalActiveTab] = useState<'inventory' | 'traceability' | 'purchasing'>('inventory');
   const activeTab = propsActiveTab || internalActiveTab;
   const setActiveTab = propsSetActiveTab || setInternalActiveTab;
   const [searchTerm, setSearchTerm] = useState('');
@@ -42,15 +44,157 @@ export default function WarehouseRole({ onBack, currentUser, activeTab: propsAct
   const [wasteType, setWasteType] = useState<'merma' | 'evaporacion' | 'derrame'>('derrame');
   const [wasteNotes, setWasteNotes] = useState('');
 
+  // Purchase Order States
+  const [showCreatePoModal, setShowCreatePoModal] = useState(false);
+  const [selectedSupplier, setSelectedSupplier] = useState('Distribuidora Harinera del Centro');
+  const [poItems, setPoItems] = useState<{ materialId: string, quantity: number, unitPrice: number }[]>([]);
+  const [newPoMatId, setNewPoMatId] = useState('');
+  const [newPoQty, setNewPoQty] = useState(100);
+  const [newPoPrice, setNewPoPrice] = useState(15);
+  const [poInvoiceNumber, setPoInvoiceNumber] = useState('');
+
   // Load database
   const loadDatabase = () => {
     setMaterials(MockDatabase.getRawMaterials());
     setMovements(MockDatabase.getStockMovements());
+    setPurchaseOrders(MockDatabase.getPurchaseOrders());
   };
 
   useEffect(() => {
     loadDatabase();
   }, []);
+
+  // Agregar un material al carro de la Orden de Compra
+  const handleAddPoItem = () => {
+    if (!newPoMatId || newPoQty <= 0 || newPoPrice <= 0) return;
+    const material = materials.find(m => m.id === newPoMatId);
+    if (!material) return;
+
+    // Verificar si ya existe en el carro
+    const existingIndex = poItems.findIndex(item => item.materialId === newPoMatId);
+    if (existingIndex > -1) {
+      const updated = [...poItems];
+      updated[existingIndex].quantity += newPoQty;
+      updated[existingIndex].unitPrice = newPoPrice;
+      setPoItems(updated);
+    } else {
+      setPoItems([...poItems, { materialId: newPoMatId, quantity: newPoQty, unitPrice: newPoPrice }]);
+    }
+    setNewPoMatId('');
+  };
+
+  const handleRemovePoItem = (index: number) => {
+    setPoItems(poItems.filter((_, i) => i !== index));
+  };
+
+  // Crear la Orden de Compra
+  const handleCreatePo = (status: 'draft' | 'ordered') => {
+    if (poItems.length === 0) {
+      alert('Debes agregar al menos un insumo a la orden.');
+      return;
+    }
+
+    const itemsWithNames = poItems.map(item => {
+      const mat = materials.find(m => m.id === item.materialId);
+      return {
+        materialId: item.materialId,
+        materialName: mat ? mat.name : 'Insumo',
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        total: item.quantity * item.unitPrice
+      };
+    });
+
+    const subtotal = itemsWithNames.reduce((acc, item) => acc + item.total, 0);
+    const tax = 0; // Alimentos tasa 0%
+    const total = subtotal + tax;
+
+    const newPO: PurchaseOrder = {
+      id: `oc-${Date.now().toString().slice(-4)}`,
+      supplierName: selectedSupplier,
+      items: itemsWithNames,
+      subtotal,
+      tax,
+      total,
+      status,
+      createdAt: new Date().toISOString()
+    };
+
+    const updatedPos = [newPO, ...purchaseOrders];
+    MockDatabase.savePurchaseOrders(updatedPos);
+    setPurchaseOrders(updatedPos);
+
+    MockDatabase.addAuditLog(
+      currentUser.name,
+      `Creó Orden de Compra ${newPO.id} (${status === 'draft' ? 'Borrador' : 'Enviada'})`,
+      'Compras',
+      `Proveedor: ${selectedSupplier}, Total: $${total} MXN`
+    );
+
+    // Resetear form
+    setPoItems([]);
+    setSelectedSupplier('Distribuidora Harinera del Centro');
+    setShowCreatePoModal(false);
+    loadDatabase();
+  };
+
+  // Recibir Orden de Compra (incrementa inventario de insumos y registra kárdex)
+  const handleReceivePo = (poId: string, invoiceNum: string) => {
+    const po = purchaseOrders.find(p => p.id === poId);
+    if (!po) return;
+
+    // Actualizar inventario de materias primas
+    const updatedMaterials = materials.map(m => {
+      const poItem = po.items.find(item => item.materialId === m.id);
+      if (poItem) {
+        return {
+          ...m,
+          stock: m.stock + poItem.quantity,
+          // Actualizamos costo promedio para el costeo de fórmulas
+          costPerUnit: poItem.unitPrice
+        };
+      }
+      return m;
+    });
+
+    // Crear movimientos de stock por cada artículo
+    const newMovements: StockMovement[] = po.items.map(poItem => ({
+      id: `mov-${Date.now()}-${poItem.materialId}`,
+      materialId: poItem.materialId,
+      type: 'entrada_compra',
+      quantity: poItem.quantity,
+      date: new Date().toISOString(),
+      lote: 'LOTE-PROV-RECIENTE',
+      user: currentUser.name,
+      notes: `Recepción de Orden de Compra ${po.id}. Factura: ${invoiceNum || 'N/A'}`
+    }));
+
+    const updatedPos = purchaseOrders.map(p => {
+      if (p.id === poId) {
+        return {
+          ...p,
+          status: 'received' as const,
+          receivedAt: new Date().toISOString(),
+          invoiceNumber: invoiceNum || 'S/F'
+        };
+      }
+      return p;
+    });
+
+    MockDatabase.saveRawMaterials(updatedMaterials);
+    MockDatabase.saveStockMovements([...newMovements, ...movements]);
+    MockDatabase.savePurchaseOrders(updatedPos);
+
+    MockDatabase.addAuditLog(
+      currentUser.name,
+      `Recibió físicamente Orden de Compra ${po.id}`,
+      'Almacén / Compras',
+      `Inventario de insumos incrementado. Factura registrada: ${invoiceNum || 'S/F'}`
+    );
+
+    loadDatabase();
+    alert(`Orden de Compra ${po.id} recibida exitosamente en Almacén.`);
+  };
 
   // Filter materials based on search
   const filteredMaterials = materials.filter(m => 
@@ -220,6 +364,17 @@ export default function WarehouseRole({ onBack, currentUser, activeTab: propsAct
           id="tab_wh_traceability"
         >
           Trazabilidad y Etiquetas de Lote
+        </button>
+        <button
+          onClick={() => setActiveTab('purchasing')}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+            activeTab === 'purchasing' 
+              ? 'bg-slate-900 text-white' 
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+          id="tab_wh_purchasing"
+        >
+          Compras y Proveedores
         </button>
       </div>
 
@@ -573,6 +728,187 @@ export default function WarehouseRole({ onBack, currentUser, activeTab: propsAct
           </div>
         )}
 
+        {/* TAB 3: PURCHASING & SUPPLIERS */}
+        {activeTab === 'purchasing' && (
+          <div className="space-y-6">
+            
+            {/* Control Bar */}
+            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-4">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 flex items-center">
+                  <ShoppingCart className="w-5 h-5 mr-2 text-indigo-600" /> Control de Adquisición y Órdenes de Compra (Procurement)
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">Crea y gestiona requerimientos de abastecimiento de materia prima grado alimenticio directamente en el ERP.</p>
+              </div>
+              <button
+                onClick={() => {
+                  setPoItems([]);
+                  setSelectedSupplier('Distribuidora Harinera del Centro');
+                  setShowCreatePoModal(true);
+                }}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5"
+                id="btn_wh_create_po"
+              >
+                <Plus className="w-4 h-4 mr-2" /> Nueva Orden de Compra
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              
+              {/* Active POs List */}
+              <div className="lg:col-span-2 space-y-4">
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 flex items-center">
+                    <FileText className="w-4 h-4 mr-1.5 text-slate-600" /> Órdenes de Compra en Curso
+                  </h4>
+
+                  <div className="space-y-4">
+                    {purchaseOrders.length === 0 ? (
+                      <div className="text-center py-10 text-slate-400">
+                        No hay órdenes de compra registradas.
+                      </div>
+                    ) : (
+                      purchaseOrders.map(po => {
+                        let statusColor = 'bg-slate-100 text-slate-700';
+                        let statusLabel = 'Borrador';
+
+                        if (po.status === 'ordered') {
+                          statusColor = 'bg-amber-100 text-amber-800';
+                          statusLabel = 'Solicitada (Tránsito)';
+                        } else if (po.status === 'received') {
+                          statusColor = 'bg-emerald-100 text-emerald-800';
+                          statusLabel = 'Recibida en Almacén';
+                        }
+
+                        return (
+                          <div key={po.id} className="border border-slate-200 rounded-xl p-4 hover:border-slate-300 hover:shadow-xs transition-all space-y-3">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <span className="text-[10px] font-mono font-bold text-slate-400">Folio: {po.id}</span>
+                                <h5 className="text-sm font-bold text-slate-900 mt-0.5">{po.supplierName}</h5>
+                                <p className="text-[10px] text-slate-400">Creada: {new Date(po.createdAt).toLocaleDateString('es-MX', { hour: '2-digit', minute: '2-digit' })}</p>
+                              </div>
+                              <div className="flex flex-col items-end gap-1.5">
+                                <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${statusColor}`}>
+                                  {statusLabel}
+                                </span>
+                                <span className="font-mono font-extrabold text-sm text-indigo-600">${po.total.toFixed(2)} MXN</span>
+                              </div>
+                            </div>
+
+                            {/* Items list summary */}
+                            <div className="bg-slate-50 rounded-lg p-2.5 border border-slate-100">
+                              <span className="text-[9px] font-bold uppercase text-slate-400 block mb-1">Artículos Solicitados</span>
+                              <div className="space-y-1">
+                                {po.items.map((item, idx) => (
+                                  <div key={idx} className="flex justify-between text-xs text-slate-700 font-medium">
+                                    <span>• {item.materialName}</span>
+                                    <span className="font-mono font-bold text-slate-900">{item.quantity} pzs / kg</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Received Details if applicable */}
+                            {po.status === 'received' && (
+                              <div className="flex justify-between text-[10px] bg-emerald-50 text-emerald-800 p-2 rounded-lg border border-emerald-100">
+                                <span><strong>Recibida:</strong> {new Date(po.receivedAt!).toLocaleDateString('es-MX')}</span>
+                                <span><strong>Factura Proveedor:</strong> {po.invoiceNumber}</span>
+                              </div>
+                            )}
+
+                            {/* Actions inside order */}
+                            {po.status === 'draft' && (
+                              <div className="flex justify-end pt-2 border-t border-slate-100">
+                                <button
+                                  onClick={() => {
+                                    const updated = purchaseOrders.map(p => {
+                                      if (p.id === po.id) return { ...p, status: 'ordered' as const };
+                                      return p;
+                                    });
+                                    MockDatabase.savePurchaseOrders(updated);
+                                    setPurchaseOrders(updated);
+                                    MockDatabase.addAuditLog(currentUser.name, `Orden de compra ${po.id} enviada al proveedor`, 'Compras', po.supplierName);
+                                  }}
+                                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] px-3 py-1.5 rounded-lg flex items-center shadow-xs transition-all"
+                                >
+                                  <ShoppingCart className="w-3.5 h-3.5 mr-1" /> Enviar Pedido al Proveedor
+                                </button>
+                              </div>
+                            )}
+
+                            {po.status === 'ordered' && (
+                              <div className="bg-amber-50/50 p-3 rounded-xl border border-amber-200/60 space-y-3 pt-3 mt-2">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-xs font-bold text-amber-900 flex items-center">
+                                    <AlertOctagon className="w-4 h-4 mr-1 text-amber-600" /> Recepción Física en Almacén
+                                  </span>
+                                  <p className="text-[10px] text-amber-700 font-medium">Al recibir los insumos, el inventario se cargará automáticamente.</p>
+                                </div>
+                                <div className="flex gap-2">
+                                  <input
+                                    type="text"
+                                    id={`invoice_input_${po.id}`}
+                                    placeholder="Folio de Factura Proveedor (Ej. F-9821)"
+                                    className="flex-1 text-xs bg-white border border-slate-200 rounded-lg p-2 font-mono font-bold"
+                                  />
+                                  <button
+                                    onClick={() => {
+                                      const inputEl = document.getElementById(`invoice_input_${po.id}`) as HTMLInputElement;
+                                      const invoiceValue = inputEl ? inputEl.value : 'S/F';
+                                      handleReceivePo(po.id, invoiceValue);
+                                    }}
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] px-4 py-2 rounded-lg transition-all border border-emerald-700 shadow-sm whitespace-nowrap"
+                                  >
+                                    Confirmar Entrada
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Suppliers panel */}
+              <div className="space-y-4">
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 flex items-center">
+                    <UserCheck className="w-4 h-4 mr-1.5 text-slate-600" /> Proveedores Homologados
+                  </h4>
+
+                  <div className="space-y-3.5">
+                    {[
+                      { name: 'Distribuidora Harinera del Centro', cat: 'Harina, Almidones y Sémola', phone: '55-1234-5678', rfc: 'DHC881022AA1' },
+                      { name: 'Azúcares y Melazas de México', cat: 'Endulzantes y Glucosas', phone: '81-4433-2211', rfc: 'AMM120504BB2' },
+                      { name: 'Grenetinas Premium de Occidente', cat: 'Grenetina, Gomas y Espesantes', phone: '33-9876-5432', rfc: 'GPO050412XX3' },
+                      { name: 'Sabores y Esencias San Ángel', cat: 'Aditivos, Aromas y Colorantes', phone: '477-889-9112', rfc: 'SES150915CC1' },
+                      { name: 'Lácteos y Grasas del Bajío', cat: 'Derivados de Leche y Mantequilla', phone: '462-555-6677', rfc: 'LGB100101DD5' },
+                    ].map((prov, i) => (
+                      <div key={i} className="text-xs p-3 rounded-lg border border-slate-100 space-y-1 hover:bg-slate-50/50 transition-all">
+                        <h5 className="font-bold text-slate-900">{prov.name}</h5>
+                        <p className="text-[10px] text-indigo-600 font-semibold">{prov.cat}</p>
+                        <div className="flex justify-between text-[10px] text-slate-400 mt-1 font-mono">
+                          <span>RFC: {prov.rfc}</span>
+                          <span>Tel: {prov.phone}</span>
+                        </div>
+                        <div className="pt-1.5 flex items-center text-[9px] text-emerald-600 font-bold">
+                          <CheckCircle className="w-3.5 h-3.5 mr-1" /> Control de Inocuidad Aprobado
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        )}
+
       </main>
 
       {/* MODAL 1: REGISTRAR COMPRA / ENTRADA */}
@@ -727,6 +1063,195 @@ export default function WarehouseRole({ onBack, currentUser, activeTab: propsAct
                 Registrar y Ajustar Almacén
               </button>
             </form>
+          </div>
+        </div>
+      )}
+      {/* MODAL 3: CREAR ORDEN DE COMPRA */}
+      {showCreatePoModal && (
+        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full border border-slate-200 overflow-hidden my-8">
+            <div className="bg-slate-900 text-white p-4 flex justify-between items-center">
+              <div>
+                <h3 className="font-bold text-sm">Generar Nueva Orden de Compra (ERP Abastecimiento)</h3>
+                <p className="text-[10px] text-slate-400">Adquisición oficial de materia prima e insumos de panificación.</p>
+              </div>
+              <button onClick={() => setShowCreatePoModal(false)} className="text-slate-400 hover:text-white">✕</button>
+            </div>
+
+            <div className="p-6 space-y-6 text-xs text-slate-700">
+              {/* Supplier and Date selection */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-semibold text-slate-600 mb-1">Proveedor Autorizado</label>
+                  <select
+                    value={selectedSupplier}
+                    onChange={(e) => setSelectedSupplier(e.target.value)}
+                    className="w-full text-xs bg-white border border-slate-200 rounded-lg p-2 font-medium"
+                  >
+                    <option value="Distribuidora Harinera del Centro">Distribuidora Harinera del Centro (Harina, Trigo)</option>
+                    <option value="Azúcares y Melazas de México">Azúcares y Melazas de México (Azúcar, Glucosa)</option>
+                    <option value="Grenetinas Premium de Occidente">Grenetinas Premium de Occidente (Grenetina)</option>
+                    <option value="Sabores y Esencias San Ángel">Sabores y Esencias San Ángel (Esencias, Colorantes)</option>
+                    <option value="Lácteos y Grasas del Bajío">Lácteos y Grasas del Bajío (Mantequilla, Chantilly)</option>
+                    <option value="Envases y Desechables Industriales">Envases y Desechables Industriales (Domos, Moldes)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-600 mb-1">Fecha de Solicitud</label>
+                  <input
+                    type="text"
+                    value={new Date().toLocaleDateString('es-MX')}
+                    className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg p-2 font-mono text-slate-500"
+                    disabled
+                  />
+                </div>
+              </div>
+
+              {/* Add Material to PO form */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[10px] flex items-center">
+                  <Plus className="w-3.5 h-3.5 mr-1" /> Agregar Insumo a la Orden
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block font-medium text-slate-500 mb-1 font-semibold">Insumo / MP</label>
+                    <select
+                      value={newPoMatId}
+                      onChange={(e) => {
+                        setNewPoMatId(e.target.value);
+                        const mat = materials.find(m => m.id === e.target.value);
+                        if (mat) setNewPoPrice(mat.costPerUnit);
+                      }}
+                      className="w-full text-xs bg-white border border-slate-200 rounded-lg p-1.5"
+                    >
+                      <option value="">-- Selecciona --</option>
+                      {materials.filter(m => !m.id.startsWith('pt')).map(m => (
+                        <option key={m.id} value={m.id}>{m.name} ({m.sku})</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block font-medium text-slate-500 mb-1 font-semibold font-semibold">Cantidad Solicitada</label>
+                    <input
+                      type="number"
+                      value={newPoQty}
+                      onChange={(e) => setNewPoQty(Number(e.target.value))}
+                      className="w-full text-xs bg-white border border-slate-200 rounded-lg p-1.5 font-mono"
+                      min="1"
+                    />
+                  </div>
+                  <div className="flex gap-2 items-end font-semibold">
+                    <div className="flex-1 font-semibold">
+                      <label className="block font-medium text-slate-500 mb-1">Costo Unitario ($)</label>
+                      <input
+                        type="number"
+                        value={newPoPrice}
+                        onChange={(e) => setNewPoPrice(Number(e.target.value))}
+                        className="w-full text-xs bg-white border border-slate-200 rounded-lg p-1.5 font-mono"
+                        min="0.1"
+                        step="0.1"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddPoItem}
+                      className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2 rounded-lg transition-all border border-slate-950 shadow-sm"
+                    >
+                      Agregar
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* PO Items Table */}
+              <div className="border border-slate-200 rounded-lg overflow-hidden">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-600 font-bold uppercase text-[9px] border-b border-slate-200">
+                      <th className="p-2.5">Insumo</th>
+                      <th className="p-2.5 text-center">Cantidad</th>
+                      <th className="p-2.5 text-right">Costo Unit.</th>
+                      <th className="p-2.5 text-right">Subtotal</th>
+                      <th className="p-2.5 text-center">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {poItems.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="text-center p-6 text-slate-400 font-medium">
+                          No hay insumos cargados a esta orden de compra.
+                        </td>
+                      </tr>
+                    ) : (
+                      poItems.map((item, index) => {
+                        const mat = materials.find(m => m.id === item.materialId);
+                        const sub = item.quantity * item.unitPrice;
+                        return (
+                          <tr key={index} className="border-b border-slate-100 hover:bg-slate-50">
+                            <td className="p-2.5 font-semibold text-slate-900">{mat?.name || 'Insumo'}</td>
+                            <td className="p-2.5 text-center font-mono font-bold">{item.quantity} {mat?.unit || 'kg'}</td>
+                            <td className="p-2.5 text-right font-mono">${item.unitPrice.toFixed(2)}</td>
+                            <td className="p-2.5 text-right font-mono font-bold text-slate-900">${sub.toFixed(2)}</td>
+                            <td className="p-2.5 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleRemovePoItem(index)}
+                                className="text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-50"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 mx-auto" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* PO Totals */}
+              <div className="flex justify-end pt-2">
+                <div className="w-64 space-y-1 text-right text-xs">
+                  <div className="flex justify-between text-slate-500">
+                    <span>Subtotal:</span>
+                    <span className="font-mono">${poItems.reduce((acc, i) => acc + (i.quantity * i.unitPrice), 0).toFixed(2)} MXN</span>
+                  </div>
+                  <div className="flex justify-between text-slate-500">
+                    <span>Impuestos (Tasa 0%):</span>
+                    <span className="font-mono">$0.00 MXN</span>
+                  </div>
+                  <div className="flex justify-between font-bold text-sm text-slate-900 border-t border-slate-200 pt-2">
+                    <span>Total Estimado:</span>
+                    <span className="font-mono text-emerald-600">${poItems.reduce((acc, i) => acc + (i.quantity * i.unitPrice), 0).toFixed(2)} MXN</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end space-x-3 pt-4 border-t border-slate-100 font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setShowCreatePoModal(false)}
+                  className="bg-white hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-lg border border-slate-200 font-semibold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleCreatePo('draft')}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-800 px-4 py-2 rounded-lg border border-slate-300 font-semibold"
+                >
+                  Guardar Borrador
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleCreatePo('ordered')}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg border border-emerald-700 font-semibold shadow-sm flex items-center"
+                >
+                  <ShoppingCart className="w-4 h-4 mr-1.5 animate-pulse" /> Enviar Orden (Solicitada)
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

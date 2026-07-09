@@ -87,10 +87,12 @@ export default function App() {
     production: [
       { id: 'orders', label: 'Órdenes de Prod.', shortLabel: 'Órdenes', icon: Activity },
       { id: 'formulas', label: 'Catálogo de Recetas', shortLabel: 'Recetas', icon: Layers },
+      { id: 'mrp', label: 'Explosión de Insumos (MRP)', shortLabel: 'MRP', icon: Activity },
     ],
     warehouse: [
       { id: 'inventory', label: 'Inventario Insumos', shortLabel: 'Stock', icon: Package },
       { id: 'traceability', label: 'Kárdex / Historial', shortLabel: 'Kárdex', icon: RefreshCw },
+      { id: 'purchasing', label: 'Órdenes de Compra', shortLabel: 'Compras', icon: ShoppingCart },
     ],
     sales: [
       { id: 'pos', label: 'Punto de Venta', shortLabel: 'Caja', icon: ShoppingCart },

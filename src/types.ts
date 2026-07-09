@@ -45,6 +45,16 @@ export interface Formula {
   otherCost: number;
 }
 
+export interface QualityCheck {
+  pH?: number; // e.g., 6.8
+  density?: number; // e.g., 1.05
+  sensoryCheck: boolean; // taste, odor, appearance
+  sealingCheck: boolean; // packaging sealed properly
+  passed: boolean;
+  checkedBy?: string;
+  checkedAt?: string;
+}
+
 export interface ProductionOrder {
   id: string;
   lote?: string; // generated upon closure
@@ -57,6 +67,7 @@ export interface ProductionOrder {
   preCheckPassed: boolean;
   notes?: string;
   operator: string;
+  qaCheck?: QualityCheck;
 }
 
 export interface StockMovement {
@@ -137,4 +148,25 @@ export interface SystemConfig {
   maxDiscountWholesale: number;
   maxDiscountDistributor: number;
   creditDaysAllowed: number;
+}
+
+export interface PurchaseOrderItem {
+  materialId: string;
+  materialName: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+}
+
+export interface PurchaseOrder {
+  id: string;
+  supplierName: string;
+  items: PurchaseOrderItem[];
+  subtotal: number;
+  tax: number;
+  total: number;
+  status: 'draft' | 'ordered' | 'received';
+  createdAt: string;
+  receivedAt?: string;
+  invoiceNumber?: string;
 }
