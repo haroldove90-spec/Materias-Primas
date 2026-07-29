@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { 
   Package, ArrowDownLeft, ArrowUpRight, AlertOctagon, Calendar, 
   Printer, QrCode, Search, RefreshCw, Plus, Trash2, UserCheck, ShieldAlert,
-  ShoppingCart, FileText, CheckCircle
+  ShoppingCart, FileText, CheckCircle, Download, X
 } from 'lucide-react';
 import { MockDatabase } from '../data';
 import { RawMaterial, StockMovement, User, PurchaseOrder } from '../types';
+import { exportToExcel, exportToPDF } from '../utils/exportUtils';
 
 interface WarehouseRoleProps {
   onBack: () => void;
@@ -341,43 +342,6 @@ export default function WarehouseRole({ onBack, currentUser, activeTab: propsAct
         </button>
       </header>
 
-      {/* Tabs */}
-      <div className="bg-white border-b border-slate-200 px-6 py-2 flex space-x-2">
-        <button
-          onClick={() => setActiveTab('inventory')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-            activeTab === 'inventory' 
-              ? 'bg-slate-900 text-white' 
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-          id="tab_wh_inventory"
-        >
-          Inventario General de Insumos
-        </button>
-        <button
-          onClick={() => setActiveTab('traceability')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-            activeTab === 'traceability' 
-              ? 'bg-slate-900 text-white' 
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-          id="tab_wh_traceability"
-        >
-          Trazabilidad y Etiquetas de Lote
-        </button>
-        <button
-          onClick={() => setActiveTab('purchasing')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-            activeTab === 'purchasing' 
-              ? 'bg-slate-900 text-white' 
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-          id="tab_wh_purchasing"
-        >
-          Compras y Proveedores
-        </button>
-      </div>
-
       <main className="flex-1 overflow-y-auto p-6 space-y-6">
         
         {/* TAB 1: INVENTORY */}
@@ -397,16 +361,28 @@ export default function WarehouseRole({ onBack, currentUser, activeTab: propsAct
                 />
               </div>
 
-              <div className="flex gap-2 w-full md:w-auto">
+              <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                <button
+                  onClick={() => exportToExcel(materials.map(m => ({ SKU: m.sku, Material: m.name, Existencia: m.stock, Unidad: m.unit, Mínimo: m.minStock, Lote: m.loteProveedor || 'S/L', Caducidad: m.expiryDate || 'N/A' })), 'Inventario_Almacen_Miauloo')}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-2 rounded-lg transition-all flex items-center justify-center gap-1 shadow-sm"
+                >
+                  <Download className="w-4 h-4" /> Excel
+                </button>
+                <button
+                  onClick={() => exportToPDF('Inventario de Materias Primas e Insumos', ['SKU', 'Material / Insumo', 'Existencia', 'Mínimo', 'Lote', 'Caducidad'], materials.map(m => [m.sku, m.name, `${m.stock} ${m.unit}`, `${m.minStock} ${m.unit}`, m.loteProveedor || 'S/L', m.expiryDate || 'N/A']))}
+                  className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-2 rounded-lg transition-all flex items-center justify-center gap-1 shadow-sm"
+                >
+                  <Printer className="w-4 h-4" /> PDF
+                </button>
                 <button
                   onClick={() => setShowInboundModal(true)}
-                  className="flex-1 md:flex-none bg-orange-500 hover:bg-orange-600 text-slate-900 text-xs font-bold px-4 py-2 rounded-lg transition-all flex items-center justify-center"
+                  className="bg-orange-500 hover:bg-orange-600 text-slate-900 text-xs font-bold px-4 py-2 rounded-lg transition-all flex items-center justify-center"
                 >
                   <ArrowDownLeft className="w-4 h-4 mr-1" /> Registrar Compra (Entrada)
                 </button>
                 <button
                   onClick={() => setShowWasteModal(true)}
-                  className="flex-1 md:flex-none bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-4 py-2 rounded-lg transition-all flex items-center justify-center border border-slate-200"
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-4 py-2 rounded-lg transition-all flex items-center justify-center border border-slate-200"
                 >
                   <AlertOctagon className="w-4 h-4 mr-1 text-red-500" /> Control de Merma / Fuga
                 </button>
@@ -484,9 +460,25 @@ export default function WarehouseRole({ onBack, currentUser, activeTab: propsAct
 
             {/* Recent Movements Log */}
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-              <h3 className="text-base font-semibold text-slate-900 mb-4 flex items-center">
-                <RefreshCw className="w-5 h-5 mr-1.5 text-slate-500" /> Registro Diario de Movimientos de Almacén
-              </h3>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+                <h3 className="text-base font-semibold text-slate-900 flex items-center">
+                  <RefreshCw className="w-5 h-5 mr-1.5 text-slate-500" /> Registro Diario de Movimientos de Almacén
+                </h3>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => exportToExcel(movements.map(mov => ({ Fecha: new Date(mov.date).toLocaleString('es-MX'), Insumo: materials.find(m => m.id === mov.materialId)?.name || 'Insumo', Tipo: mov.type, Cantidad: mov.quantity, Lote: mov.lote || 'N/A', Operario: mov.user, Observaciones: mov.notes })), 'Movimientos_Almacen_Kardex')}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-all"
+                  >
+                    <Download className="w-3.5 h-3.5" /> Excel
+                  </button>
+                  <button
+                    onClick={() => exportToPDF('Registro de Movimientos de Almacén (Kardex)', ['Fecha', 'Insumo', 'Tipo', 'Cantidad', 'Lote', 'Operario'], movements.map(mov => [new Date(mov.date).toLocaleString('es-MX'), materials.find(m => m.id === mov.materialId)?.name || 'Insumo', mov.type.toUpperCase(), `${mov.type.startsWith('entrada') ? '+' : '-'}${mov.quantity}`, mov.lote || 'N/A', mov.user]))}
+                    className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-all"
+                  >
+                    <Printer className="w-3.5 h-3.5" /> PDF
+                  </button>
+                </div>
+              </div>
               <div className="border border-slate-100 rounded-lg overflow-hidden">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
@@ -740,17 +732,31 @@ export default function WarehouseRole({ onBack, currentUser, activeTab: propsAct
                 </h3>
                 <p className="text-xs text-slate-500 mt-1">Crea y gestiona requerimientos de abastecimiento de materia prima grado alimenticio directamente en el ERP.</p>
               </div>
-              <button
-                onClick={() => {
-                  setPoItems([]);
-                  setSelectedSupplier('Distribuidora Harinera del Centro');
-                  setShowCreatePoModal(true);
-                }}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5"
-                id="btn_wh_create_po"
-              >
-                <Plus className="w-4 h-4 mr-2" /> Nueva Orden de Compra
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => exportToExcel(purchaseOrders.map(po => ({ Folio: po.id, Proveedor: po.supplierName, Fecha: new Date(po.createdAt).toLocaleDateString('es-MX'), Estatus: po.status, Total: po.total })), 'Ordenes_de_Compra_Miauloo')}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-2 rounded-xl transition-all flex items-center justify-center gap-1 shadow-sm"
+                >
+                  <Download className="w-4 h-4" /> Excel
+                </button>
+                <button
+                  onClick={() => exportToPDF('Registro de Órdenes de Compra (Procurement)', ['Folio', 'Proveedor', 'Fecha Creación', 'Estatus', 'Total ($)'], purchaseOrders.map(po => [po.id, po.supplierName, new Date(po.createdAt).toLocaleDateString('es-MX'), po.status.toUpperCase(), `$${po.total.toFixed(2)}`]))}
+                  className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-2 rounded-xl transition-all flex items-center justify-center gap-1 shadow-sm"
+                >
+                  <Printer className="w-4 h-4" /> PDF
+                </button>
+                <button
+                  onClick={() => {
+                    setPoItems([]);
+                    setSelectedSupplier('Distribuidora Harinera del Centro');
+                    setShowCreatePoModal(true);
+                  }}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5"
+                  id="btn_wh_create_po"
+                >
+                  <Plus className="w-4 h-4 mr-2" /> Nueva Orden de Compra
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -913,14 +919,14 @@ export default function WarehouseRole({ onBack, currentUser, activeTab: propsAct
 
       {/* MODAL 1: REGISTRAR COMPRA / ENTRADA */}
       {showInboundModal && (
-        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden">
-            <div className="bg-slate-900 text-white p-4 flex justify-between items-center">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] flex flex-col border border-slate-200 overflow-hidden my-auto">
+            <div className="bg-slate-900 text-white p-4 flex justify-between items-center shrink-0">
               <h3 className="font-bold text-sm">Registrar Entrada de Compra (Proveedor)</h3>
               <button onClick={() => setShowInboundModal(false)} className="text-slate-400 hover:text-white">✕</button>
             </div>
 
-            <form onSubmit={handleInboundSubmit} className="p-5 space-y-4 text-xs">
+            <form onSubmit={handleInboundSubmit} className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
               <div>
                 <label className="block font-semibold text-slate-600 mb-1">Insumo / Material comprado</label>
                 <select
@@ -936,7 +942,7 @@ export default function WarehouseRole({ onBack, currentUser, activeTab: propsAct
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-600 mb-1">Cantidad Recibida</label>
                   <input
@@ -984,7 +990,7 @@ export default function WarehouseRole({ onBack, currentUser, activeTab: propsAct
 
               <button
                 type="submit"
-                className="w-full bg-orange-500 hover:bg-orange-600 text-slate-900 font-bold py-2 rounded-lg text-xs"
+                className="w-full bg-orange-500 hover:bg-orange-600 text-slate-900 font-bold py-2 rounded-lg text-xs shadow-sm"
               >
                 Cargar Stock y Lote
               </button>
@@ -995,14 +1001,14 @@ export default function WarehouseRole({ onBack, currentUser, activeTab: propsAct
 
       {/* MODAL 2: REGISTRAR MERMA / DERRAME */}
       {showWasteModal && (
-        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden">
-            <div className="bg-slate-900 text-white p-4 flex justify-between items-center">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] flex flex-col border border-slate-200 overflow-hidden my-auto">
+            <div className="bg-slate-900 text-white p-4 flex justify-between items-center shrink-0">
               <h3 className="font-bold text-sm">Registrar Merma, Evaporación o Derrame</h3>
               <button onClick={() => setShowWasteModal(false)} className="text-slate-400 hover:text-white">✕</button>
             </div>
 
-            <form onSubmit={handleWasteSubmit} className="p-5 space-y-4 text-xs">
+            <form onSubmit={handleWasteSubmit} className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
               <div>
                 <label className="block font-semibold text-slate-600 mb-1">Insumo afectado</label>
                 <select
@@ -1018,7 +1024,7 @@ export default function WarehouseRole({ onBack, currentUser, activeTab: propsAct
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-600 mb-1">Cantidad Perdida</label>
                   <input
@@ -1068,9 +1074,9 @@ export default function WarehouseRole({ onBack, currentUser, activeTab: propsAct
       )}
       {/* MODAL 3: CREAR ORDEN DE COMPRA */}
       {showCreatePoModal && (
-        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full border border-slate-200 overflow-hidden my-8">
-            <div className="bg-slate-900 text-white p-4 flex justify-between items-center">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col border border-slate-200 overflow-hidden my-auto">
+            <div className="bg-slate-900 text-white p-4 flex justify-between items-center shrink-0">
               <div>
                 <h3 className="font-bold text-sm">Generar Nueva Orden de Compra (ERP Abastecimiento)</h3>
                 <p className="text-[10px] text-slate-400">Adquisición oficial de materia prima e insumos de panificación.</p>
@@ -1078,7 +1084,7 @@ export default function WarehouseRole({ onBack, currentUser, activeTab: propsAct
               <button onClick={() => setShowCreatePoModal(false)} className="text-slate-400 hover:text-white">✕</button>
             </div>
 
-            <div className="p-6 space-y-6 text-xs text-slate-700">
+            <div className="p-4 sm:p-6 space-y-6 text-xs text-slate-700 overflow-y-auto flex-1">
               {/* Supplier and Date selection */}
               <div className="grid grid-cols-2 gap-4">
                 <div>

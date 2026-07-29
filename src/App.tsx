@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { 
   Shield, Beaker, Package, ShoppingCart, Truck, RefreshCw, Home, LogOut,
-  BarChart3, DollarSign, Settings, Activity, Layers, Users, FileCheck, MapPin
+  BarChart3, DollarSign, Settings, Activity, Layers, Users, FileCheck, MapPin,
+  FileText, Receipt
 } from 'lucide-react';
 import { MockDatabase } from './data';
 import { User, RoleType } from './types';
@@ -98,6 +99,8 @@ export default function App() {
       { id: 'pos', label: 'Punto de Venta', shortLabel: 'Caja', icon: ShoppingCart },
       { id: 'crm', label: 'Clientes y Créditos', shortLabel: 'Clientes', icon: Users },
       { id: 'cobranza', label: 'Cobros y Remisiones', shortLabel: 'Cobros', icon: FileCheck },
+      { id: 'traslado', label: 'Traslado de Productos', shortLabel: 'Traslado', icon: FileText },
+      { id: 'notas', label: 'Notas de Venta', shortLabel: 'Notas', icon: Receipt },
     ],
     delivery: [
       { id: 'routes', label: 'Rutas de Entrega', shortLabel: 'Rutas', icon: MapPin },

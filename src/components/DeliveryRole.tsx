@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Truck, Navigation, FileText, CheckCircle, Smartphone, Camera, 
-  Trash2, CreditCard, DollarSign, Clock, MapPin, ChevronRight, PenTool 
+  Trash2, CreditCard, DollarSign, Clock, MapPin, ChevronRight, PenTool, Download, Printer 
 } from 'lucide-react';
 import { MockDatabase } from '../data';
 import { DeliveryRoute, Sale, User } from '../types';
+import { exportToExcel, exportToPDF } from '../utils/exportUtils';
 
 interface DeliveryRoleProps {
   onBack: () => void;
@@ -242,7 +243,23 @@ export default function DeliveryRole({ onBack, currentUser }: DeliveryRoleProps)
           {/* RUTA PENDIENTE LIST */}
           {!selectedRouteId ? (
             <div className="space-y-3">
-              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider px-1">Ruta Asignada</h4>
+              <div className="flex justify-between items-center px-1">
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Ruta Asignada</h4>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => exportToExcel(routes.map(r => ({ Folio: r.id, Cliente: r.clientName, Dirección: r.address, Teléfono: r.phone, Total: r.totalAmount, Estatus: r.status })), 'Ruta_Distribucion_Miauloo')}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold px-2.5 py-1 rounded flex items-center gap-1 shadow-sm"
+                  >
+                    <Download className="w-3 h-3" /> Excel
+                  </button>
+                  <button
+                    onClick={() => exportToPDF('Hoja de Ruta de Distribución y Entregas', ['Folio', 'Cliente', 'Dirección', 'Teléfono', 'Monto ($)', 'Estatus'], routes.map(r => [r.id, r.clientName, r.address, r.phone, `$${r.totalAmount.toFixed(2)}`, r.status.toUpperCase()]))}
+                    className="bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold px-2.5 py-1 rounded flex items-center gap-1 shadow-sm"
+                  >
+                    <Printer className="w-3 h-3" /> PDF
+                  </button>
+                </div>
+              </div>
               
               {routes.length === 0 ? (
                 <p className="text-center py-12 text-slate-500 text-xs italic">No tienes rutas o entregas asignadas hoy.</p>

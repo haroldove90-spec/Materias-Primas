@@ -1,4 +1,4 @@
-import { RawMaterial, Formula, ProductionOrder, StockMovement, Client, Sale, DeliveryRoute, AuditLog, User, SystemConfig, PurchaseOrder } from './types';
+import { RawMaterial, Formula, ProductionOrder, StockMovement, Client, Sale, DeliveryRoute, AuditLog, User, SystemConfig, PurchaseOrder, TransferSheet, SaleNote } from './types';
 
 export const INITIAL_USERS: User[] = [
   { id: 'u-1', name: 'Jonathan (Gerente)', username: 'jonathan', role: 'admin', pin: '1111', active: true, permissions: ['dashboard', 'finanzas', 'configuracion'] },
@@ -216,6 +216,57 @@ export const INITIAL_PURCHASE_ORDERS: PurchaseOrder[] = [
   }
 ];
 
+export const INITIAL_TRANSFER_SHEETS: TransferSheet[] = [
+  {
+    id: 'ts-1',
+    folio: 'SIM-270726',
+    date: '2026-07-27',
+    expeditedIn: 'San Juan del Rio, Qro.',
+    elaboratedBy: 'Areli Antonia Mireles Cruz',
+    clientName: 'JORGE LUIS',
+    destination: 'SAN JUAN DEL RIO',
+    address: 'Av. Juárez #104, Col. Centro',
+    cp: '76800',
+    colonia: 'Centro',
+    fiscalRegimen: '601 - General de Ley Personas Morales',
+    phone: '(52) 427 116 9640',
+    clientNo: 'CLI-0042',
+    rfc: 'BAMN8611098PA',
+    curp: 'BAMN8611098HQT',
+    paymentForm: 'PPD - Pago en parcialidades o diferido',
+    operator: 'Pedro (Chofer Logistics)',
+    plateNo: 'UK-882-J',
+    items: [
+      { quantity: 20, unit: 'LTS', description: 'SOSA CAUSTICA', unitPrice: 18.00, total: 360.00 },
+      { quantity: 20, unit: 'LTS', description: 'HIPOCLORITO', unitPrice: 11.00, total: 220.00 }
+    ],
+    subtotal: 580.00,
+    tax: 0,
+    total: 580.00,
+    notes: 'Entregar en horario matutino. Verificar sellos de seguridad.',
+    createdAt: '2026-07-27T09:30:00Z'
+  }
+];
+
+export const INITIAL_SALE_NOTES: SaleNote[] = [
+  {
+    id: 'sn-1',
+    noteNo: '5075',
+    date: '2026-07-28',
+    clientName: 'MIAULOO S.A. DE C.V.',
+    phone: '4271169640',
+    city: 'San Juan del Río, Qro.',
+    items: [
+      { pieces: 5, product: 'SOSA CAUSTICA LIQUIDA 1L', unitPrice: 35.00, total: 175.00 },
+      { pieces: 10, product: 'HIPOCLORITO DE SODIO CONCENTRADO 1L', unitPrice: 22.00, total: 220.00 }
+    ],
+    subtotal: 395.00,
+    tax: 0,
+    total: 395.00,
+    createdAt: '2026-07-28T11:00:00Z'
+  }
+];
+
 export class MockDatabase {
   static get<T>(key: string, defaultValue: T): T {
     try {
@@ -325,6 +376,22 @@ export class MockDatabase {
 
   static savePurchaseOrders(data: PurchaseOrder[]) {
     this.set('purchase_orders', data);
+  }
+
+  static getTransferSheets(): TransferSheet[] {
+    return this.get<TransferSheet[]>('transfer_sheets', INITIAL_TRANSFER_SHEETS);
+  }
+
+  static saveTransferSheets(data: TransferSheet[]) {
+    this.set('transfer_sheets', data);
+  }
+
+  static getSaleNotes(): SaleNote[] {
+    return this.get<SaleNote[]>('sale_notes', INITIAL_SALE_NOTES);
+  }
+
+  static saveSaleNotes(data: SaleNote[]) {
+    this.set('sale_notes', data);
   }
 
   static addAuditLog(user: string, action: string, module: string, details: string) {

@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { 
   TrendingUp, Users, DollarSign, AlertTriangle, Shield, Settings, 
-  Plus, Trash2, Calendar, FileText, CheckCircle, RefreshCw, Layers 
+  Plus, Trash2, Calendar, FileText, CheckCircle, RefreshCw, Layers, Download, Printer 
 } from 'lucide-react';
 import { MockDatabase } from '../data';
 import { RawMaterial, Client, Sale, AuditLog, User, SystemConfig } from '../types';
+import { exportToExcel, exportToPDF } from '../utils/exportUtils';
 
 interface AdminRoleProps {
   onBack: () => void;
@@ -211,43 +212,6 @@ export default function AdminRole({ onBack, currentUser, activeTab: propsActiveT
           Cerrar Sesión Gerente
         </button>
       </header>
-
-      {/* Main Tabs bar */}
-      <div className="bg-white border-b border-slate-200 px-6 py-2 flex space-x-2">
-        <button
-          onClick={() => setActiveTab('analytics')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-            activeTab === 'analytics' 
-              ? 'bg-slate-900 text-white' 
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-          id="tab_admin_analytics"
-        >
-          Dashboard y Analítica
-        </button>
-        <button
-          onClick={() => setActiveTab('finances')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-            activeTab === 'finances' 
-              ? 'bg-slate-900 text-white' 
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-          id="tab_admin_finances"
-        >
-          Finanzas y Auditoría
-        </button>
-        <button
-          onClick={() => setActiveTab('config')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-            activeTab === 'config' 
-              ? 'bg-slate-900 text-white' 
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-          id="tab_admin_config"
-        >
-          Configuración del Sistema
-        </button>
-      </div>
 
       {/* Alerts Banner */}
       {(zeroStockMaterials.length > 0 || overdueClients.length > 0) && (
@@ -692,8 +656,26 @@ export default function AdminRole({ onBack, currentUser, activeTab: propsActiveT
 
             {/* Historial de Auditoría Completo */}
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-              <h3 className="text-base font-semibold text-slate-900 mb-4">Historial de Auditoría de Seguridad</h3>
-              <p className="text-xs text-slate-500 mb-3">Registro inmutable de modificaciones clave en fórmulas, ajustes de inventario o emisión de créditos.</p>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+                <div>
+                  <h3 className="text-base font-semibold text-slate-900">Historial de Auditoría de Seguridad</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Registro inmutable de modificaciones clave en fórmulas, ajustes de inventario o emisión de créditos.</p>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => exportToExcel(auditLogs.map(log => ({ Fecha: new Date(log.timestamp).toLocaleString('es-MX'), Usuario: log.user, Módulo: log.module, Acción: log.action, Detalles: log.details })), 'Auditoria_Seguridad_Miauloo')}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-all"
+                  >
+                    <Download className="w-3.5 h-3.5" /> Excel
+                  </button>
+                  <button
+                    onClick={() => exportToPDF('Bitácora de Auditoría de Seguridad ERP Miauloo', ['Fecha', 'Usuario', 'Módulo', 'Acción', 'Detalles'], auditLogs.map(log => [new Date(log.timestamp).toLocaleString('es-MX'), log.user, log.module, log.action, log.details]))}
+                    className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-all"
+                  >
+                    <Printer className="w-3.5 h-3.5" /> PDF
+                  </button>
+                </div>
+              </div>
               
               <div className="border border-slate-100 rounded-lg overflow-hidden">
                 <table className="w-full text-left border-collapse text-xs">

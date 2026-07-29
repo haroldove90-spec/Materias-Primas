@@ -150,6 +150,62 @@ export interface SystemConfig {
   creditDaysAllowed: number;
 }
 
+export interface TransferSheetItem {
+  quantity: number;
+  unit: string;
+  description: string;
+  unitPrice: number;
+  total: number;
+}
+
+export interface TransferSheet {
+  id: string;
+  folio: string;
+  date: string;
+  expeditedIn: string;
+  elaboratedBy: string;
+  clientName: string;
+  destination: string;
+  address?: string;
+  cp?: string;
+  colonia?: string;
+  fiscalRegimen?: string;
+  phone?: string;
+  clientNo?: string;
+  rfc?: string;
+  curp?: string;
+  paymentForm?: string;
+  operator?: string;
+  plateNo?: string;
+  items: TransferSheetItem[];
+  subtotal: number;
+  tax: number;
+  total: number;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface SaleNoteItem {
+  pieces: number;
+  product: string;
+  unitPrice: number;
+  total: number;
+}
+
+export interface SaleNote {
+  id: string;
+  noteNo: string;
+  date: string;
+  clientName: string;
+  phone?: string;
+  city?: string;
+  items: SaleNoteItem[];
+  subtotal: number;
+  tax: number;
+  total: number;
+  createdAt: string;
+}
+
 export interface PurchaseOrderItem {
   materialId: string;
   materialName: string;

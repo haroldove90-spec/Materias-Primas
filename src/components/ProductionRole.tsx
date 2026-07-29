@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Beaker, ClipboardList, Check, AlertCircle, Plus, Info, 
-  Layers, Package, BadgeAlert, UserCheck, Calendar, Activity, FileCheck, ShoppingCart, Trash2
+  Layers, Package, BadgeAlert, UserCheck, Calendar, Activity, FileCheck, ShoppingCart, Trash2, Download, Printer
 } from 'lucide-react';
 import { MockDatabase } from '../data';
 import { RawMaterial, Formula, ProductionOrder, StockMovement, User } from '../types';
+import { exportToExcel, exportToPDF } from '../utils/exportUtils';
 
 interface ProductionRoleProps {
   onBack: () => void;
@@ -494,43 +495,6 @@ export default function ProductionRole({ onBack, currentUser, activeTab: propsAc
         </button>
       </header>
 
-      {/* Main Tabs */}
-      <div className="bg-white border-b border-slate-200 px-6 py-2 flex space-x-2">
-        <button
-          onClick={() => setActiveTab('orders')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-            activeTab === 'orders' 
-              ? 'bg-slate-900 text-white' 
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-          id="tab_prod_orders"
-        >
-          Órdenes de Fabricación
-        </button>
-        <button
-          onClick={() => setActiveTab('formulas')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-            activeTab === 'formulas' 
-              ? 'bg-slate-900 text-white' 
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-          id="tab_prod_formulas"
-        >
-          Catálogo y Registro de Recetas
-        </button>
-        <button
-          onClick={() => setActiveTab('mrp')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center ${
-            activeTab === 'mrp' 
-              ? 'bg-slate-900 text-white' 
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-          id="tab_prod_mrp"
-        >
-          <Activity className="w-4 h-4 mr-1.5 text-indigo-500 animate-pulse" /> Explosión de Materiales (MRP)
-        </button>
-      </div>
-
       <main className="flex-1 overflow-y-auto p-6 space-y-6">
         
         {/* TAB 1: ORDERS */}
@@ -593,9 +557,25 @@ export default function ProductionRole({ onBack, currentUser, activeTab: propsAc
 
             {/* Listado de Órdenes */}
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm lg:col-span-2">
-              <h3 className="text-base font-semibold text-slate-900 mb-4 flex items-center">
-                <ClipboardList className="w-5 h-5 mr-1.5 text-slate-500" /> Órdenes de Trabajo Activas e Históricas
-              </h3>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+                <h3 className="text-base font-semibold text-slate-900 flex items-center">
+                  <ClipboardList className="w-5 h-5 mr-1.5 text-slate-500" /> Órdenes de Trabajo Activas e Históricas
+                </h3>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => exportToExcel(productionOrders.map(po => ({ Folio: po.id, Receta: formulas.find(f => f.id === po.formulaId)?.name || po.formulaId, Cantidad: `${po.quantityLiters} kg`, Estatus: po.status, Responsable: po.assignedTo, Fecha: new Date(po.createdAt).toLocaleDateString('es-MX') })), 'Ordenes_de_Produccion_Miauloo')}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-all"
+                  >
+                    <Download className="w-3.5 h-3.5" /> Excel
+                  </button>
+                  <button
+                    onClick={() => exportToPDF('Registro de Órdenes de Producción Miauloo', ['Folio', 'Receta / Producto', 'Volumen (kg)', 'Estatus', 'Operador', 'Fecha'], productionOrders.map(po => [po.id, formulas.find(f => f.id === po.formulaId)?.name || po.formulaId, `${po.quantityLiters} kg`, po.status.toUpperCase(), po.assignedTo, new Date(po.createdAt).toLocaleDateString('es-MX')]))}
+                    className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-all"
+                  >
+                    <Printer className="w-3.5 h-3.5" /> PDF
+                  </button>
+                </div>
+              </div>
 
               <div className="space-y-4">
                 {productionOrders.map(order => {
@@ -1149,10 +1129,10 @@ export default function ProductionRole({ onBack, currentUser, activeTab: propsAc
 
       {/* Pre-check Validation Modal */}
       {selectedOrder && (
-        <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full border border-slate-200 overflow-hidden flex flex-col max-h-[85vh]">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full border border-slate-200 overflow-hidden flex flex-col max-h-[90vh] my-auto">
             
-            <div className="bg-slate-900 text-white p-4 flex justify-between items-center">
+            <div className="bg-slate-900 text-white p-4 flex justify-between items-center shrink-0">
               <div className="flex items-center space-x-2">
                 <Beaker className="w-5 h-5 text-cyan-400" />
                 <h3 className="font-bold text-sm tracking-tight">Pre-chequeo del Almacén Físico</h3>
@@ -1255,9 +1235,9 @@ export default function ProductionRole({ onBack, currentUser, activeTab: propsAc
         if (!targetOrder) return null;
 
         return (
-          <div className="fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4 z-50 animate-fade-in">
-            <div className="bg-white rounded-xl shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden text-slate-700">
-              <div className="bg-indigo-900 text-white p-4 flex justify-between items-center">
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50 animate-fade-in">
+            <div className="bg-white rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] flex flex-col border border-slate-200 overflow-hidden text-slate-700 my-auto">
+              <div className="bg-indigo-900 text-white p-4 flex justify-between items-center shrink-0">
                 <div className="flex items-center space-x-2">
                   <FileCheck className="w-5 h-5 text-indigo-300" />
                   <div>
@@ -1265,10 +1245,10 @@ export default function ProductionRole({ onBack, currentUser, activeTab: propsAc
                     <p className="text-[10px] text-indigo-200">Validación de inocuidad y empaque antes de liberación.</p>
                   </div>
                 </div>
-                <button onClick={() => setQaOrderId(null)} className="text-indigo-200 hover:text-white">✕</button>
+                <button onClick={() => setQaOrderId(null)} className="text-indigo-200 hover:text-white font-bold">✕</button>
               </div>
 
-              <div className="p-5 space-y-4 text-xs font-semibold">
+              <div className="p-5 space-y-4 text-xs font-semibold overflow-y-auto flex-1">
                 <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
                   <p className="font-bold text-slate-900 text-xs">Orden a Liberar: {targetOrder.id}</p>
                   <p className="text-[11px] text-slate-500">Receta: {formula?.name}</p>
