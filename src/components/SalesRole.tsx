@@ -7,6 +7,7 @@ import {
 import { MockDatabase } from '../data';
 import { RawMaterial, Client, Sale, OrderItem, DeliveryRoute, User, TransferSheet, TransferSheetItem, SaleNote, SaleNoteItem } from '../types';
 import { exportToExcel, exportToPDF } from '../utils/exportUtils';
+import { recordSaveTelemetry } from '../services/supabaseTelemetry';
 
 interface SalesRoleProps {
   onBack: () => void;
@@ -257,7 +258,20 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
 
     // Actualizar Base de Datos
     const currentSales = MockDatabase.getSales();
+    const prevSalesCount = currentSales.length;
     MockDatabase.saveSales([newSale, ...currentSales]);
+
+    // Registrar Telemetría de Guardado Inmediata
+    recordSaveTelemetry({
+      table: 'sales',
+      folio: newSale.id,
+      action: isQuote ? 'Cotización CRM Guardada' : `Venta / Facturación (${billingType})`,
+      countBefore: prevSalesCount,
+      countAfter: prevSalesCount + 1,
+      status: 'success',
+      payloadSummary: `Total: $${cartTotals.total.toLocaleString()} MXN • Cliente: ${selectedClient?.name || 'Express'}`,
+      source: 'cloud_sync'
+    });
 
     if (!isQuote) {
       // 1. Descontar Stock de Producto Terminado
@@ -570,8 +584,22 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
     };
 
     const updated = [newSheet, ...transferSheets];
+    const prevSheetsCount = transferSheets.length;
     MockDatabase.saveTransferSheets(updated);
     MockDatabase.addAuditLog(currentUser.name, 'Guardó Hoja de Traslado de Productos', 'Ventas / Traslado', `Folio: ${tsFolio}`);
+    
+    // Registrar Telemetría de Guardado
+    recordSaveTelemetry({
+      table: 'transfer_sheets',
+      folio: tsFolio,
+      action: 'Hoja de Traslado de Productos Guardada',
+      countBefore: prevSheetsCount,
+      countAfter: prevSheetsCount + 1,
+      status: 'success',
+      payloadSummary: `Destino: ${tsDestination} • Cliente: ${tsClientName} • Total: $${total.toFixed(2)}`,
+      source: 'cloud_sync'
+    });
+
     setTransferSheets(updated);
     setShowCreateTransferModal(false);
     setSelectedTransferSheet(newSheet);
@@ -626,8 +654,21 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
     };
 
     const updated = [newNote, ...saleNotes];
+    const prevNotesCount = saleNotes.length;
     MockDatabase.saveSaleNotes(updated);
     MockDatabase.addAuditLog(currentUser.name, 'Guardó Nota de Venta', 'Ventas / Notas', `Nota No: ${snNoteNo}`);
+    
+    // Registrar Telemetría de Guardado
+    recordSaveTelemetry({
+      table: 'sale_notes',
+      folio: `NOTA-${snNoteNo}`,
+      action: 'Nota de Venta Guardada',
+      countBefore: prevNotesCount,
+      countAfter: prevNotesCount + 1,
+      status: 'success',
+      payloadSummary: `Cliente: ${snClientName} • Ciudad: ${snCity} • Total: $${total.toFixed(2)}`,
+      source: 'cloud_sync'
+    });
     setSaleNotes(updated);
     setShowCreateNoteModal(false);
     setSelectedSaleNote(newNote);

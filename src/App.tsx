@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   Shield, Beaker, Package, ShoppingCart, Truck, RefreshCw, Home, LogOut,
   BarChart3, DollarSign, Settings, Activity, Layers, Users, FileCheck, MapPin,
-  FileText, Receipt
+  FileText, Receipt, Database
 } from 'lucide-react';
 import { MockDatabase } from './data';
 import { User, RoleType } from './types';
@@ -12,12 +12,24 @@ import ProductionRole from './components/ProductionRole';
 import WarehouseRole from './components/WarehouseRole';
 import SalesRole from './components/SalesRole';
 import DeliveryRole from './components/DeliveryRole';
+import { SupabaseModal } from './components/SupabaseModal';
+import { SupabaseSmartButton } from './components/SupabaseSmartButton';
+import { SaveTelemetryToast } from './components/SaveTelemetryToast';
+import { recordSaveTelemetry } from './services/supabaseTelemetry';
+import { SUPABASE_PROJECT_INFO } from './lib/supabase';
 
 export default function App() {
   // Authentication & Active States
   const [activeRole, setActiveRole] = useState<RoleType | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [activeRoleTab, setActiveRoleTab] = useState<string>('analytics');
+  const [showSupabaseModal, setShowSupabaseModal] = useState(false);
+  const [modalInitialTab, setModalInitialTab] = useState<'status' | 'sync' | 'history' | 'sql' | 'tables'>('status');
+
+  const openSupabaseWithTab = (tab: 'status' | 'sync' | 'history' | 'sql' | 'tables' = 'status') => {
+    setModalInitialTab(tab);
+    setShowSupabaseModal(true);
+  };
 
   // List of roles with their clean color configuration
   const rolesList = [
@@ -122,13 +134,27 @@ export default function App() {
       else if (roleType === 'sales') setActiveRoleTab('pos');
       else if (roleType === 'delivery') setActiveRoleTab('routes');
       
+      const prevLogsCount = MockDatabase.getAuditLogs().length;
+
       // Log event to Audits
       MockDatabase.addAuditLog(
         matchUser.name,
-        'Accedió directamente',
+        'Acceso de Operador',
         'Seguridad',
-        `Navegación libre al rol: ${matchUser.role}`
+        `Inicio de sesión directo al rol: ${matchUser.role}`
       );
+
+      // Record Save Telemetry for User Access
+      recordSaveTelemetry({
+        table: 'audit_logs',
+        folio: `ACC-${matchUser.role.toUpperCase()}-${Date.now().toString().slice(-4)}`,
+        action: `Acceso al Sistema (${matchUser.name})`,
+        countBefore: prevLogsCount,
+        countAfter: prevLogsCount + 1,
+        status: 'success',
+        payloadSummary: `Autenticación de ${matchUser.name} (${matchUser.role})`,
+        source: 'cloud_sync'
+      });
     }
   };
 
@@ -140,14 +166,8 @@ export default function App() {
   const resetAllDatabaseDemo = () => {
     if (window.confirm("¿Seguro que deseas restablecer el inventario, ventas y rutas de entrega al estado demo original?")) {
       MockDatabase.reset();
-      // Reload page to refresh state in components
       window.location.reload();
     }
-  };
-
-  // Switch role directly from sidebar or bottom navigation
-  const handleDirectSwitch = (roleType: RoleType) => {
-    handleRoleClick(roleType);
   };
 
   // Helper to render active role component
@@ -179,6 +199,14 @@ export default function App() {
 
         {/* Corporate Header */}
         <header className="max-w-4xl mx-auto w-full text-center py-10 shrink-0 relative z-10 flex flex-col items-center">
+          {/* Botón Inteligente Supabase con Semáforo en Vivo & Latencia en ms */}
+          <div className="mb-4">
+            <SupabaseSmartButton 
+              onClick={() => openSupabaseWithTab('status')}
+              variant="pill"
+            />
+          </div>
+
           {/* Elegant Minimal Logo */}
           <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center text-white font-extrabold text-2xl tracking-tighter shadow-lg mb-6 border border-slate-800">
             MP
@@ -221,13 +249,31 @@ export default function App() {
         {/* Footer controls */}
         <footer className="max-w-5xl mx-auto w-full text-center py-6 text-xs text-slate-400 border-t border-slate-200/60 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0 relative z-10">
           <p>© 2026 Materias primas. Todos los derechos reservados.</p>
-          <button 
-            onClick={resetAllDatabaseDemo}
-            className="text-slate-500 hover:text-indigo-600 transition-colors flex items-center gap-2 bg-white border border-slate-200 px-3 py-1.5 rounded-lg shadow-xs hover:shadow-sm"
-          >
-            <RefreshCw className="w-3.5 h-3.5" /> Restablecer Base de Datos Demo
-          </button>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => openSupabaseWithTab('history')}
+              className="text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-3 py-1.5 rounded-lg shadow-xs hover:shadow-sm font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+            >
+              <Database className="w-3.5 h-3.5" /> Historial de Confirmaciones
+            </button>
+            <button 
+              onClick={resetAllDatabaseDemo}
+              className="text-slate-500 hover:text-indigo-600 transition-colors flex items-center gap-2 bg-white border border-slate-200 px-3 py-1.5 rounded-lg shadow-xs hover:shadow-sm cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5" /> Restablecer Demo
+            </button>
+          </div>
         </footer>
+
+        {/* Save Telemetry Toast */}
+        <SaveTelemetryToast onOpenConfirmationsHistory={() => openSupabaseWithTab('history')} />
+
+        {/* Supabase Management Modal */}
+        <SupabaseModal 
+          isOpen={showSupabaseModal} 
+          onClose={() => setShowSupabaseModal(false)} 
+          initialTab={modalInitialTab}
+        />
       </div>
     );
   }
@@ -247,14 +293,20 @@ export default function App() {
           </span>
         </div>
         
-        {/* Quick Back to Home */}
-        <button 
-          onClick={handleLogout}
-          className="p-1.5 text-slate-400 hover:text-slate-900 transition-colors"
-          title="Ir al Inicio"
-        >
-          <Home className="w-5 h-5" />
-        </button>
+        {/* Supabase & Quick Back to Home */}
+        <div className="flex items-center gap-2">
+          <SupabaseSmartButton 
+            onClick={() => openSupabaseWithTab('status')}
+            variant="compact"
+          />
+          <button 
+            onClick={handleLogout}
+            className="p-1.5 text-slate-400 hover:text-slate-900 transition-colors"
+            title="Ir al Inicio"
+          >
+            <Home className="w-5 h-5" />
+          </button>
+        </div>
       </header>
 
       {/* 2. FULLSCREEN LEFT SIDEBAR (lg:flex) */}
@@ -263,15 +315,17 @@ export default function App() {
         {/* Top brand & navigation list */}
         <div className="flex flex-col">
           {/* Brand header */}
-          <div className="h-16 px-6 border-b border-slate-100 flex items-center gap-3">
-            <div className="w-9 h-9 bg-slate-900 rounded-xl flex items-center justify-center text-white font-extrabold text-base shadow-sm">
-              MP
-            </div>
-            <div>
-              <h2 className="font-extrabold text-slate-900 text-sm tracking-tight font-display uppercase leading-tight">
-                Materias primas
-              </h2>
-              <p className="text-[10px] text-slate-400 font-medium">Control Integrado</p>
+          <div className="h-16 px-6 border-b border-slate-100 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-slate-900 rounded-xl flex items-center justify-center text-white font-extrabold text-base shadow-sm">
+                MP
+              </div>
+              <div>
+                <h2 className="font-extrabold text-slate-900 text-sm tracking-tight font-display uppercase leading-tight">
+                  Materias primas
+                </h2>
+                <p className="text-[10px] text-slate-400 font-medium">Control Integrado</p>
+              </div>
             </div>
           </div>
 
@@ -308,9 +362,15 @@ export default function App() {
           </div>
         </div>
 
-        {/* Bottom profile & home button */}
-        <div className="p-4 border-t border-slate-100 bg-slate-50/50">
-          <div className="flex items-center justify-between mb-3 px-2">
+        {/* Bottom profile, Supabase DB & home button */}
+        <div className="p-4 border-t border-slate-100 bg-slate-50/50 space-y-2.5">
+          {/* Supabase Smart Card Button */}
+          <SupabaseSmartButton 
+            onClick={() => openSupabaseWithTab('status')}
+            variant="card"
+          />
+
+          <div className="flex items-center justify-between px-2 pt-1">
             <div className="flex flex-col">
               <span className="text-[10px] text-slate-400 font-semibold uppercase">Usuario</span>
               <span className="text-xs font-bold text-slate-800">{currentUser?.name}</span>
@@ -335,6 +395,16 @@ export default function App() {
       <main className="flex-1 overflow-auto bg-[#F8FAFC] pb-20 lg:pb-0 min-h-0">
         {renderActiveDashboard()}
       </main>
+
+      {/* Save Telemetry Toast */}
+      <SaveTelemetryToast onOpenConfirmationsHistory={() => openSupabaseWithTab('history')} />
+
+      {/* Supabase Management Modal */}
+      <SupabaseModal 
+        isOpen={showSupabaseModal} 
+        onClose={() => setShowSupabaseModal(false)} 
+        initialTab={modalInitialTab}
+      />
 
       {/* 4. MOBILE/TABLET BOTTOM NAVIGATION BAR (lg:hidden) */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-slate-200 z-50 flex items-center justify-around px-2 shadow-lg shrink-0">

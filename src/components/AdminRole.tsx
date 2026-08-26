@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { 
   TrendingUp, Users, DollarSign, AlertTriangle, Shield, Settings, 
-  Plus, Trash2, Calendar, FileText, CheckCircle, RefreshCw, Layers, Download, Printer 
+  Plus, Trash2, Calendar, FileText, CheckCircle, RefreshCw, Layers, Download, Printer, Database 
 } from 'lucide-react';
 import { MockDatabase } from '../data';
 import { RawMaterial, Client, Sale, AuditLog, User, SystemConfig } from '../types';
 import { exportToExcel, exportToPDF } from '../utils/exportUtils';
+import { SupabaseModal } from './SupabaseModal';
+import { SUPABASE_PROJECT_INFO, SUPABASE_URL } from '../lib/supabase';
+
 
 interface AdminRoleProps {
   onBack: () => void;
@@ -28,6 +31,8 @@ export default function AdminRole({ onBack, currentUser, activeTab: propsActiveT
   const activeTab = propsActiveTab || internalActiveTab;
   const setActiveTab = propsSetActiveTab || setInternalActiveTab;
   const [chartPeriod, setChartPeriod] = useState<'daily' | 'monthly' | 'yearly'>('daily');
+  const [showSupabaseModal, setShowSupabaseModal] = useState(false);
+
   
   // Create Employee Form State
   const [newEmpName, setNewEmpName] = useState('');
@@ -849,10 +854,51 @@ export default function AdminRole({ onBack, currentUser, activeTab: propsActiveT
 
             </div>
 
+            {/* Supabase Cloud Database Integration Card */}
+            <div className="bg-gradient-to-br from-slate-900 to-slate-950 text-white p-6 rounded-2xl border border-slate-800 shadow-xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+              
+              <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                      <Database className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <h4 className="font-extrabold text-base text-white">Base de Datos Supabase (PostgreSQL)</h4>
+                        <span className="bg-emerald-500/20 text-emerald-400 text-[10px] font-mono px-2.5 py-0.5 rounded-full border border-emerald-500/30 font-bold">
+                          Configurado
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 font-mono mt-0.5">
+                        Proyecto: {SUPABASE_PROJECT_INFO.projectName} ({SUPABASE_PROJECT_INFO.projectId})
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
+                    Integración completa con Supabase REST API y PostgreSQL. Genera el script SQL de las 13 tablas con RLS y siembra todos los datos de prueba directamente.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3 shrink-0">
+                  <button
+                    onClick={() => setShowSupabaseModal(true)}
+                    className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-lg transition-all flex items-center gap-2"
+                  >
+                    <Database className="w-4 h-4" /> Ver Script SQL & Sincronizar
+                  </button>
+                </div>
+              </div>
+            </div>
+
           </div>
         )}
 
       </main>
+
+      {/* Supabase Management Modal */}
+      <SupabaseModal isOpen={showSupabaseModal} onClose={() => setShowSupabaseModal(false)} />
     </div>
   );
 }

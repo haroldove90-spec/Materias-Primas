@@ -6,6 +6,7 @@ import {
 import { MockDatabase } from '../data';
 import { RawMaterial, Formula, ProductionOrder, StockMovement, User } from '../types';
 import { exportToExcel, exportToPDF } from '../utils/exportUtils';
+import { recordSaveTelemetry } from '../services/supabaseTelemetry';
 
 interface ProductionRoleProps {
   onBack: () => void;
@@ -142,6 +143,7 @@ export default function ProductionRole({ onBack, currentUser, activeTab: propsAc
     };
 
     const updatedOrders = [...productionOrders, newOrder];
+    const prevOrdersCount = productionOrders.length;
     MockDatabase.saveProductionOrders(updatedOrders);
     MockDatabase.addAuditLog(
       currentUser.name,
@@ -149,6 +151,18 @@ export default function ProductionRole({ onBack, currentUser, activeTab: propsAc
       'Producción',
       `Órden ID: ${newOrder.id} para ${formulas.find(f => f.id === createOrderFormulaId)?.name}`
     );
+
+    // Registrar Telemetría de Guardado Inmediata
+    recordSaveTelemetry({
+      table: 'production_orders',
+      folio: newOrder.id,
+      action: 'Orden de Producción Creada',
+      countBefore: prevOrdersCount,
+      countAfter: prevOrdersCount + 1,
+      status: 'success',
+      payloadSummary: `Fórmula: ${formulas.find(f => f.id === createOrderFormulaId)?.name || 'Receta'} • Cantidad: ${createOrderQty} kg/L`,
+      source: 'cloud_sync'
+    });
     
     // Reset form
     setCreateOrderFormulaId('');
