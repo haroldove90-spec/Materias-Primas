@@ -747,3 +747,36 @@ export async function checkSupabaseConnection(): Promise<{ connected: boolean; m
     };
   }
 }
+
+// Fetch all active users from Supabase Cloud
+export async function fetchUsersFromSupabase() {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .order('created_at', { ascending: true });
+    
+    if (error) throw error;
+    return { success: true, data: data || [] };
+  } catch (error: any) {
+    return { success: false, error: error?.message || 'Error al obtener usuarios de Supabase' };
+  }
+}
+
+// Directly update user role in Supabase and sync with local storage
+export async function updateUserRoleInSupabase(userId: string, newRole: 'admin' | 'production' | 'warehouse' | 'sales' | 'delivery') {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .update({ role: newRole })
+      .eq('id', userId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { success: true, data };
+  } catch (error: any) {
+    return { success: false, error: error?.message || 'Error al actualizar el rol en Supabase' };
+  }
+}
+

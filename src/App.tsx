@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   Shield, Beaker, Package, ShoppingCart, Truck, RefreshCw, Home, LogOut,
   BarChart3, DollarSign, Settings, Activity, Layers, Users, FileCheck, MapPin,
-  FileText, Receipt, Database
+  FileText, Receipt, Database, ChevronRight, Lock
 } from 'lucide-react';
 import { MockDatabase } from './data';
 import { User, RoleType } from './types';
@@ -12,6 +12,7 @@ import ProductionRole from './components/ProductionRole';
 import WarehouseRole from './components/WarehouseRole';
 import SalesRole from './components/SalesRole';
 import DeliveryRole from './components/DeliveryRole';
+import { RoleAuthModal } from './components/RoleAuthModal';
 import { SupabaseModal } from './components/SupabaseModal';
 import { SupabaseSmartButton } from './components/SupabaseSmartButton';
 import { SaveTelemetryToast } from './components/SaveTelemetryToast';
@@ -25,6 +26,9 @@ export default function App() {
   const [activeRoleTab, setActiveRoleTab] = useState<string>('analytics');
   const [showSupabaseModal, setShowSupabaseModal] = useState(false);
   const [modalInitialTab, setModalInitialTab] = useState<'status' | 'sync' | 'history' | 'sql' | 'tables'>('status');
+
+  // Modal for role-based authentication and registration
+  const [authModalRole, setAuthModalRole] = useState<RoleType | null>(null);
 
   const openSupabaseWithTab = (tab: 'status' | 'sync' | 'history' | 'sql' | 'tables' = 'status') => {
     setModalInitialTab(tab);
@@ -119,48 +123,42 @@ export default function App() {
     ],
   };
 
-  // Handler for direct role navigation without credentials
-  const handleRoleClick = (roleType: RoleType) => {
-    const allUsers = MockDatabase.getUsers();
-    const matchUser = allUsers.find(u => u.role === roleType);
-    if (matchUser) {
-      setCurrentUser(matchUser);
+  // Handler when clicking a role card on the home screen
+  const handleRoleCardClick = (roleType: RoleType) => {
+    // If admin is currently authenticated, allow direct navigation immediately
+    if (currentUser?.role === 'admin') {
       setActiveRole(roleType);
-
-      // Set default tab for selected role
       if (roleType === 'admin') setActiveRoleTab('analytics');
       else if (roleType === 'production') setActiveRoleTab('orders');
       else if (roleType === 'warehouse') setActiveRoleTab('inventory');
       else if (roleType === 'sales') setActiveRoleTab('pos');
       else if (roleType === 'delivery') setActiveRoleTab('routes');
-      
-      const prevLogsCount = MockDatabase.getAuditLogs().length;
-
-      // Log event to Audits
-      MockDatabase.addAuditLog(
-        matchUser.name,
-        'Acceso de Operador',
-        'Seguridad',
-        `Inicio de sesión directo al rol: ${matchUser.role}`
-      );
-
-      // Record Save Telemetry for User Access
-      recordSaveTelemetry({
-        table: 'audit_logs',
-        folio: `ACC-${matchUser.role.toUpperCase()}-${Date.now().toString().slice(-4)}`,
-        action: `Acceso al Sistema (${matchUser.name})`,
-        countBefore: prevLogsCount,
-        countAfter: prevLogsCount + 1,
-        status: 'success',
-        payloadSummary: `Autenticación de ${matchUser.name} (${matchUser.role})`,
-        source: 'cloud_sync'
-      });
+      return;
     }
+
+    // Otherwise open the dedicated login / register form for this role
+    setAuthModalRole(roleType);
+  };
+
+  // Handler when user successfully logs in or registers via RoleAuthModal
+  const handleAuthSuccess = (authenticatedUser: User) => {
+    const selectedRole = authModalRole || authenticatedUser.role;
+    setCurrentUser(authenticatedUser);
+    setActiveRole(selectedRole);
+    setAuthModalRole(null);
+
+    // Set default tab for selected role
+    if (selectedRole === 'admin') setActiveRoleTab('analytics');
+    else if (selectedRole === 'production') setActiveRoleTab('orders');
+    else if (selectedRole === 'warehouse') setActiveRoleTab('inventory');
+    else if (selectedRole === 'sales') setActiveRoleTab('pos');
+    else if (selectedRole === 'delivery') setActiveRoleTab('routes');
   };
 
   const handleLogout = () => {
     setActiveRole(null);
     setCurrentUser(null);
+    setAuthModalRole(null);
   };
 
   const resetAllDatabaseDemo = () => {
@@ -175,7 +173,7 @@ export default function App() {
     if (!activeRole || !currentUser) return null;
     switch (activeRole) {
       case 'admin':
-        return <AdminRole onBack={handleLogout} currentUser={currentUser} activeTab={activeRoleTab as any} setActiveTab={setActiveRoleTab as any} />;
+        return <AdminRole onBack={handleLogout} currentUser={currentUser} activeTab={activeRoleTab as any} setActiveTab={setActiveRoleTab as any} onNavigateToRole={handleRoleCardClick} />;
       case 'production':
         return <ProductionRole onBack={handleLogout} currentUser={currentUser} activeTab={activeRoleTab as any} setActiveTab={setActiveRoleTab as any} />;
       case 'warehouse':
@@ -236,7 +234,7 @@ export default function App() {
               return (
                 <button
                   key={role.type}
-                  onClick={() => handleRoleClick(role.type)}
+                  onClick={() => handleRoleCardClick(role.type)}
                   className={`p-6 bg-white rounded-2xl border border-slate-200/80 hover:border-slate-300 hover:-translate-y-1 transition-all duration-350 cursor-pointer flex flex-col items-center justify-center text-center space-y-4 shadow-sm hover:shadow-md group`}
                   id={`btn_role_select_${role.type}`}
                 >
@@ -273,6 +271,15 @@ export default function App() {
             </button>
           </div>
         </footer>
+
+        {/* Modal de Acceso y Registro específico por Rol */}
+        {authModalRole && (
+          <RoleAuthModal
+            role={authModalRole}
+            onClose={() => setAuthModalRole(null)}
+            onSuccess={handleAuthSuccess}
+          />
+        )}
 
         {/* Save Telemetry Toast */}
         <SaveTelemetryToast 
@@ -386,6 +393,49 @@ export default function App() {
               );
             })}
           </div>
+
+          {/* SÓLO EL ADMIN PUEDE NAVEGAR EN TODOS LOS ROLES */}
+          {currentUser?.role === 'admin' && (
+            <div className="px-4 py-3 border-t border-slate-100 flex flex-col gap-2">
+              <div className="flex items-center justify-between px-1">
+                <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">
+                  Navegación Admin
+                </span>
+                <span className="text-[9px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded">
+                  Todos los Roles
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {rolesList.map((r) => {
+                  const RoleIcon = r.icon;
+                  const isCurrent = activeRole === r.type;
+                  return (
+                    <button
+                      key={r.type}
+                      onClick={() => handleRoleCardClick(r.type)}
+                      className={`flex items-center gap-1.5 p-2 rounded-lg text-[11px] font-semibold transition-all cursor-pointer border ${
+                        isCurrent
+                          ? 'bg-[#032B4E] text-white border-[#032B4E] shadow-xs'
+                          : 'bg-slate-50 text-slate-700 hover:bg-slate-100 hover:text-slate-900 border-slate-200'
+                      }`}
+                      title={`Navegar a ${r.title}`}
+                    >
+                      <RoleIcon className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">{r.shortLabel}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* En los demás roles se desactiva el cambio de rol */}
+          {currentUser && currentUser.role !== 'admin' && (
+            <div className="mx-4 my-2 p-2.5 bg-slate-50 rounded-xl border border-slate-200 flex items-center gap-2 text-slate-500 text-[11px]">
+              <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span>Rol asignado: <strong className="text-slate-700 uppercase">{currentUser.role}</strong></span>
+            </div>
+          )}
         </div>
 
         {/* Bottom profile, Supabase DB & home button */}

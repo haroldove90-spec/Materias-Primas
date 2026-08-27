@@ -4,17 +4,19 @@ import {
   Plus, Trash2, Calendar, FileText, CheckCircle, RefreshCw, Layers, Download, Printer, Database 
 } from 'lucide-react';
 import { MockDatabase } from '../data';
-import { RawMaterial, Client, Sale, AuditLog, User, SystemConfig } from '../types';
+import { RawMaterial, Client, Sale, AuditLog, User, SystemConfig, RoleType } from '../types';
 import { exportToExcel, exportToPDF } from '../utils/exportUtils';
 import { SupabaseModal } from './SupabaseModal';
 import { SUPABASE_PROJECT_INFO, SUPABASE_URL } from '../lib/supabase';
-
+import { updateUserRoleInSupabase } from '../services/supabaseService';
+import { recordSaveTelemetry } from '../services/supabaseTelemetry';
 
 interface AdminRoleProps {
   onBack: () => void;
   currentUser: User;
   activeTab?: 'analytics' | 'finances' | 'config';
   setActiveTab?: (tab: 'analytics' | 'finances' | 'config') => void;
+  onNavigateToRole?: (role: RoleType) => void;
 }
 
 export default function AdminRole({ onBack, currentUser, activeTab: propsActiveTab, setActiveTab: propsSetActiveTab }: AdminRoleProps) {
@@ -136,6 +138,46 @@ export default function AdminRole({ onBack, currentUser, activeTab: propsActiveT
       `ID de empleado eliminado: ${id}`
     );
     loadDatabase();
+  };
+
+  // Handler para cambiar rol de usuario directamente (sincronizando con Supabase)
+  const handleRoleChangeForUser = async (userId: string, newRole: RoleType, userName: string) => {
+    const updatedUsers = users.map(u => {
+      if (u.id === userId) {
+        return { ...u, role: newRole };
+      }
+      return u;
+    });
+
+    // Save locally
+    MockDatabase.saveUsers(updatedUsers);
+    setUsers(updatedUsers);
+
+    MockDatabase.addAuditLog(
+      currentUser.name,
+      `Cambio de Rol: ${userName}`,
+      'Seguridad & Roles',
+      `Se reasignó el rol a "${newRole.toUpperCase()}" para el usuario ${userName}`
+    );
+
+    // Sync directly with Supabase Cloud users table
+    try {
+      const res = await updateUserRoleInSupabase(userId, newRole);
+      if (res.success) {
+        recordSaveTelemetry({
+          table: 'users',
+          folio: `ROL-${newRole.toUpperCase()}-${Date.now().toString().slice(-4)}`,
+          action: `Actualización de Rol Supabase (${userName})`,
+          countBefore: users.length,
+          countAfter: users.length,
+          status: 'success',
+          payloadSummary: `Rol cambiado a ${newRole} en Supabase Cloud`,
+          source: 'cloud_sync'
+        });
+      }
+    } catch (e) {
+      console.log('Error updating role in Supabase:', e);
+    }
   };
 
   // Actualizar días de crédito y límite por cliente
@@ -829,16 +871,27 @@ export default function AdminRole({ onBack, currentUser, activeTab: propsActiveT
                       {users.map((u) => (
                         <tr key={u.id} className="hover:bg-slate-50">
                           <td className="p-3 font-semibold text-slate-900">{u.name}</td>
-                          <td className="p-3 font-mono text-slate-600">{u.username}</td>
+                          <td className="p-3 font-mono text-slate-600">@{u.username}</td>
                           <td className="p-3">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              u.role === 'admin' ? 'bg-amber-100 text-amber-800' :
-                              u.role === 'production' ? 'bg-cyan-100 text-cyan-800' :
-                              u.role === 'warehouse' ? 'bg-orange-100 text-orange-800' :
-                              u.role === 'sales' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
-                            }`}>
-                              {u.role.toUpperCase()}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <select
+                                value={u.role}
+                                onChange={(e) => handleRoleChangeForUser(u.id, e.target.value as RoleType, u.name)}
+                                className={`text-xs font-bold px-2 py-1 rounded-lg border focus:outline-none cursor-pointer ${
+                                  u.role === 'admin' ? 'bg-amber-50 text-amber-900 border-amber-300 focus:ring-amber-500' :
+                                  u.role === 'production' ? 'bg-cyan-50 text-cyan-900 border-cyan-300 focus:ring-cyan-500' :
+                                  u.role === 'warehouse' ? 'bg-orange-50 text-orange-900 border-orange-300 focus:ring-orange-500' :
+                                  u.role === 'sales' ? 'bg-purple-50 text-purple-900 border-purple-300 focus:ring-purple-500' : 'bg-blue-50 text-blue-900 border-blue-300 focus:ring-blue-500'
+                                }`}
+                                title="Cambiar rol de usuario (sincroniza en Supabase)"
+                              >
+                                <option value="admin">ADMINISTRADOR</option>
+                                <option value="production">PRODUCCIÓN</option>
+                                <option value="warehouse">ALMACÉN</option>
+                                <option value="sales">VENTAS</option>
+                                <option value="delivery">REPARTO</option>
+                              </select>
+                            </div>
                           </td>
                           <td className="p-3 font-mono">{u.pin}</td>
                           <td className="p-3">
@@ -853,8 +906,8 @@ export default function AdminRole({ onBack, currentUser, activeTab: propsActiveT
                           <td className="p-3 text-right">
                             <button
                               onClick={() => handleRemoveEmployee(u.id, u.name)}
-                              className="text-red-600 hover:text-red-900 hover:bg-red-50 p-1.5 rounded transition-all"
-                              title="Baja"
+                              className="text-red-600 hover:text-red-900 hover:bg-red-50 p-1.5 rounded transition-all cursor-pointer"
+                              title="Baja de empleado"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
