@@ -39,6 +39,7 @@ export default function AdminRole({ onBack, currentUser, activeTab: propsActiveT
   // Create Employee Form State
   const [newEmpName, setNewEmpName] = useState('');
   const [newEmpUsername, setNewEmpUsername] = useState('');
+  const [newEmpEmail, setNewEmpEmail] = useState('');
   const [newEmpPin, setNewEmpPin] = useState('');
   const [newEmpRole, setNewEmpRole] = useState<'admin' | 'production' | 'warehouse' | 'sales' | 'delivery'>('sales');
 
@@ -101,6 +102,7 @@ export default function AdminRole({ onBack, currentUser, activeTab: propsActiveT
       id: `u-${Date.now()}`,
       name: newEmpName,
       username: newEmpUsername,
+      email: newEmpEmail.trim() || `${newEmpUsername}@miauloo.com`,
       role: newEmpRole,
       pin: newEmpPin,
       active: true,
@@ -113,12 +115,13 @@ export default function AdminRole({ onBack, currentUser, activeTab: propsActiveT
       currentUser.name,
       `Creó empleado: ${newEmpName}`,
       'Configuración',
-      `Asignado rol: ${newEmpRole}, Usuario: ${newEmpUsername}`
+      `Asignado rol: ${newEmpRole}, Usuario: ${newEmpUsername}, Email: ${newEmployee.email}`
     );
     
     // Reset form
     setNewEmpName('');
     setNewEmpUsername('');
+    setNewEmpEmail('');
     setNewEmpPin('');
     loadDatabase();
   };
@@ -810,6 +813,17 @@ export default function AdminRole({ onBack, currentUser, activeTab: propsActiveT
                     />
                   </div>
 
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Correo Electrónico</label>
+                    <input
+                      type="email"
+                      placeholder="Ej. jperez@miauloo.com"
+                      value={newEmpEmail}
+                      onChange={(e) => setNewEmpEmail(e.target.value)}
+                      className="w-full text-sm bg-white border border-slate-200 rounded-lg p-2.5 focus:ring-2 focus:ring-amber-500"
+                    />
+                  </div>
+
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">PIN / Password</label>
@@ -870,7 +884,10 @@ export default function AdminRole({ onBack, currentUser, activeTab: propsActiveT
                     <tbody className="divide-y divide-slate-100">
                       {users.map((u) => (
                         <tr key={u.id} className="hover:bg-slate-50">
-                          <td className="p-3 font-semibold text-slate-900">{u.name}</td>
+                          <td className="p-3">
+                            <div className="font-semibold text-slate-900">{u.name}</div>
+                            {u.email && <div className="text-[10px] text-slate-400 font-normal">{u.email}</div>}
+                          </td>
                           <td className="p-3 font-mono text-slate-600">@{u.username}</td>
                           <td className="p-3">
                             <div className="flex items-center gap-2">

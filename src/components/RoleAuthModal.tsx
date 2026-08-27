@@ -1,7 +1,11 @@
-import React, { useState } from 'react';
-import { Shield, Beaker, Package, ShoppingCart, Truck, Lock, User as UserIcon, UserPlus, LogIn, ArrowLeft, CheckCircle2, AlertCircle, KeyRound } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { 
+  Shield, Beaker, Package, ShoppingCart, Truck, Lock, User as UserIcon, 
+  UserPlus, LogIn, ArrowLeft, CheckCircle2, AlertCircle, KeyRound, Mail,
+  Eye, EyeOff, Sparkles
+} from 'lucide-react';
 import { RoleType, User } from '../types';
-import { MockDatabase } from '../data';
+import { MockDatabase, INITIAL_USERS } from '../data';
 import { supabase } from '../lib/supabase';
 import { recordSaveTelemetry } from '../services/supabaseTelemetry';
 
@@ -14,55 +18,85 @@ interface RoleAuthModalProps {
 
 export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleAuthModalProps) {
   const [isRegisterMode, setIsRegisterMode] = useState(false);
-  const [username, setUsername] = useState('');
+  const [usernameOrEmail, setUsernameOrEmail] = useState('');
+  const [email, setEmail] = useState('');
   const [pin, setPin] = useState('');
   const [name, setName] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Predefined default user for this specific role for quick 1-click test
+  const defaultUserForRole = INITIAL_USERS.find(u => u.role === role);
+
+  useEffect(() => {
+    // Ensure local database has initial users if empty
+    const currentUsers = MockDatabase.getUsers();
+    if (!currentUsers || currentUsers.length === 0) {
+      MockDatabase.saveUsers(INITIAL_USERS);
+    }
+  }, []);
+
   if (!isOpen) return null;
 
-  const roleMeta: Record<RoleType, { title: string; subtitle: string; icon: React.ComponentType<any>; color: string; badge: string }> = {
+  const roleMeta: Record<RoleType, { title: string; subtitle: string; icon: React.ComponentType<any>; color: string; badge: string; defaultUserHint: string; defaultPin: string }> = {
     admin: {
-      title: 'Acceso a Gerencia & Administración',
-      subtitle: 'Control total de finanzas, catálogo de usuarios y configuración del sistema.',
+      title: 'Gerencia & Administración',
+      subtitle: 'Control total de finanzas, catálogo de usuarios, configuraciones y todos los roles.',
       icon: Shield,
       color: 'from-amber-600 to-amber-700',
-      badge: 'bg-amber-100 text-amber-900 border-amber-300'
+      badge: 'bg-amber-100 text-amber-900 border-amber-300',
+      defaultUserHint: 'jonathan',
+      defaultPin: '1111'
     },
     production: {
-      title: 'Acceso a Producción & Fórmulas',
+      title: 'Producción & Fórmulas',
       subtitle: 'Preparación de mezclas, explosión de insumos (MRP) y órdenes de trabajo.',
       icon: Beaker,
       color: 'from-cyan-600 to-cyan-700',
-      badge: 'bg-cyan-100 text-cyan-900 border-cyan-300'
+      badge: 'bg-cyan-100 text-cyan-900 border-cyan-300',
+      defaultUserHint: 'diana_prod',
+      defaultPin: '2222'
     },
     warehouse: {
-      title: 'Acceso a Almacén & Inventarios',
+      title: 'Almacén & Inventarios',
       subtitle: 'Kárdex, trazabilidad de lotes, mermas y órdenes de compra de insumos.',
       icon: Package,
       color: 'from-orange-600 to-orange-700',
-      badge: 'bg-orange-100 text-orange-900 border-orange-300'
+      badge: 'bg-orange-100 text-orange-900 border-orange-300',
+      defaultUserHint: 'carlos_alm',
+      defaultPin: '3333'
     },
     sales: {
-      title: 'Acceso a Punto de Venta & Clientes',
+      title: 'Punto de Venta & Clientes',
       subtitle: 'Caja rápida, remisiones, notas de venta, traslados y crédito de clientes.',
       icon: ShoppingCart,
       color: 'from-purple-600 to-purple-700',
-      badge: 'bg-purple-100 text-purple-900 border-purple-300'
+      badge: 'bg-purple-100 text-purple-900 border-purple-300',
+      defaultUserHint: 'mariana_vta',
+      defaultPin: '4444'
     },
     delivery: {
-      title: 'Acceso a Reparto & Logística',
+      title: 'Reparto & Logística',
       subtitle: 'Rutas de distribución, evidencias de entrega y cobro en destino.',
       icon: Truck,
       color: 'from-blue-600 to-blue-700',
-      badge: 'bg-blue-100 text-blue-900 border-blue-300'
+      badge: 'bg-blue-100 text-blue-900 border-blue-300',
+      defaultUserHint: 'pedro_rep',
+      defaultPin: '5555'
     }
   };
 
   const currentMeta = roleMeta[role];
   const IconComponent = currentMeta.icon;
+
+  const handleQuickFill = (user: string, passwordPin: string) => {
+    setUsernameOrEmail(user);
+    setPin(passwordPin);
+    setError(null);
+    setSuccessMsg(`Credenciales cargadas para @${user}`);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,54 +105,47 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
     setLoading(true);
 
     try {
-      const cleanUsername = username.trim().toLowerCase();
+      const cleanInput = usernameOrEmail.trim().toLowerCase();
       const cleanPin = pin.trim();
 
-      if (!cleanUsername || !cleanPin) {
-        setError('Por favor completa todos los campos.');
+      if (!cleanInput || !cleanPin) {
+        setError('Por favor completa todos los campos requeridos.');
         setLoading(false);
         return;
       }
 
-      // First check in local database
-      const localUsers = MockDatabase.getUsers();
-
-      // Also attempt to query Supabase directly for updated roles & newly created users
-      let remoteUser: any = null;
-      try {
-        const { data, error: sbErr } = await supabase
-          .from('users')
-          .select('*')
-          .ilike('username', cleanUsername)
-          .maybeSingle();
-
-        if (!sbErr && data) {
-          remoteUser = {
-            id: data.id,
-            name: data.name,
-            username: data.username,
-            role: data.role as RoleType,
-            pin: data.pin,
-            active: data.active ?? true,
-            permissions: Array.isArray(data.permissions) ? data.permissions : []
-          };
-        }
-      } catch (err) {
-        console.log('Supabase sync skip during auth:', err);
+      // Ensure local database has users
+      let localUsers = MockDatabase.getUsers();
+      if (!localUsers || localUsers.length === 0) {
+        localUsers = INITIAL_USERS;
+        MockDatabase.saveUsers(localUsers);
       }
 
       if (isRegisterMode) {
-        // REGISTRATION MODE
+        // ============================================
+        // MODO REGISTRO DE NUEVO USUARIO
+        // ============================================
         if (!name.trim()) {
-          setError('Ingresa tu nombre completo.');
+          setError('Por favor ingresa tu nombre completo.');
           setLoading(false);
           return;
         }
 
-        // Check if username already taken locally or on Supabase
-        const existsLocal = localUsers.find(u => u.username.toLowerCase() === cleanUsername);
-        if (existsLocal || remoteUser) {
-          setError(`El usuario "@${cleanUsername}" ya se encuentra registrado. Usa otro nombre de usuario o inicia sesión.`);
+        const cleanEmail = email.trim().toLowerCase();
+        if (cleanEmail && !cleanEmail.includes('@')) {
+          setError('Por favor ingresa un correo electrónico válido con formato @dominio.com');
+          setLoading(false);
+          return;
+        }
+
+        // Verify if username or email already exists locally
+        const existsLocal = localUsers.find(
+          u => u.username.toLowerCase() === cleanInput || 
+               (cleanEmail && u.email && u.email.toLowerCase() === cleanEmail)
+        );
+
+        if (existsLocal) {
+          setError(`El usuario "@${cleanInput}" o correo ya se encuentra registrado. Inicia sesión o elige otro nombre de usuario.`);
           setLoading(false);
           return;
         }
@@ -135,7 +162,8 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
         const newUser: User = {
           id: `u-${Date.now()}`,
           name: name.trim(),
-          username: cleanUsername,
+          username: cleanInput,
+          email: cleanEmail || `${cleanInput}@miauloo.com`,
           role: role, // Automatically assign the active modal role
           pin: cleanPin,
           active: true,
@@ -152,13 +180,14 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
             id: newUser.id,
             name: newUser.name,
             username: newUser.username,
+            email: newUser.email,
             role: newUser.role,
             pin: newUser.pin,
             active: newUser.active,
             permissions: newUser.permissions
           });
         } catch (sbErr) {
-          console.log('Error syncing user to Supabase:', sbErr);
+          console.log('Error syncing user to Supabase (se guardó en local):', sbErr);
         }
 
         // 3. Log event and record telemetry
@@ -166,7 +195,7 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
           newUser.name,
           'Registro de Operador',
           'Seguridad',
-          `Alta de nuevo usuario (@${newUser.username}) con rol asignado automático: ${newUser.role.toUpperCase()}`
+          `Alta de nuevo usuario (@${newUser.username} / ${newUser.email}) con rol asignado automático: ${newUser.role.toUpperCase()}`
         );
 
         recordSaveTelemetry({
@@ -180,72 +209,111 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
           source: 'cloud_sync'
         });
 
-        setSuccessMsg(`¡Registro exitoso! Te has registrado con el rol de ${currentMeta.title}. Accediendo...`);
+        setSuccessMsg(`¡Registro completado con éxito! Se te ha asignado el rol de ${currentMeta.title}. Accediendo...`);
         setTimeout(() => {
           onSuccess(newUser);
         }, 800);
 
       } else {
-        // LOGIN MODE
-        // Prioritize Supabase data if role was updated in Supabase cloud!
-        const existing = remoteUser || localUsers.find(u => u.username.toLowerCase() === cleanUsername);
+        // ============================================
+        // MODO INICIO DE SESIÓN
+        // ============================================
 
-        if (!existing) {
-          setError(`No se encontró al usuario "@${cleanUsername}". Si eres nuevo en este departamento, regístrate abajo.`);
+        // Flexible lookup: Find by username, email, or common alias (e.g., 'carlos' -> 'carlos_alm', 'diana' -> 'diana_prod', 'mariana' -> 'mariana_vta', 'pedro' -> 'pedro_rep')
+        let matchedUser = localUsers.find(u => {
+          const uName = u.username.toLowerCase();
+          const uEmail = u.email?.toLowerCase() || '';
+          const fullName = u.name.toLowerCase();
+          return (
+            uName === cleanInput ||
+            uEmail === cleanInput ||
+            uName.replace(/_(prod|alm|vta|rep)$/, '') === cleanInput ||
+            fullName.includes(cleanInput)
+          );
+        });
+
+        // Also attempt to query Supabase directly for updated roles or users created remotely
+        try {
+          const { data, error: sbErr } = await supabase
+            .from('users')
+            .select('*')
+            .or(`username.ilike.${cleanInput},email.ilike.${cleanInput},username.ilike.${cleanInput}_%`)
+            .maybeSingle();
+
+          if (!sbErr && data) {
+            matchedUser = {
+              id: data.id,
+              name: data.name,
+              username: data.username,
+              email: data.email || `${data.username}@miauloo.com`,
+              role: data.role as RoleType,
+              pin: data.pin,
+              active: data.active ?? true,
+              permissions: Array.isArray(data.permissions) ? data.permissions : []
+            };
+          }
+        } catch (err) {
+          console.log('Supabase sync skip during auth:', err);
+        }
+
+        if (!matchedUser) {
+          setError(`No se encontró el usuario o correo "${cleanInput}". Si aún no tienes cuenta en este departamento, haz clic en la pestaña "Registrarse".`);
           setLoading(false);
           return;
         }
 
-        if (existing.pin !== cleanPin) {
+        // Validate PIN / Password
+        if (matchedUser.pin !== cleanPin) {
           setError('PIN o contraseña incorrecta. Verifica tu clave de acceso.');
           setLoading(false);
           return;
         }
 
-        if (existing.active === false) {
-          setError('Esta cuenta de usuario ha sido desactivada por Gerencia.');
+        if (matchedUser.active === false) {
+          setError('Esta cuenta de usuario ha sido desactivada por la Gerencia.');
           setLoading(false);
           return;
         }
 
-        // Check if role is admin: Admin can access ANY module!
-        // If not admin, verify that the user's role matches the module role
-        if (existing.role !== 'admin' && existing.role !== role) {
-          setError(`Tu cuenta (@${existing.username}) tiene asignado el rol de "${existing.role.toUpperCase()}". No tienes autorización para ingresar al módulo de "${role.toUpperCase()}". Solicita al Administrador un cambio de rol en Supabase.`);
+        // Role verification:
+        // Admin can access ANY module!
+        // Other roles can only access their specific role module
+        if (matchedUser.role !== 'admin' && matchedUser.role !== role) {
+          setError(`Tu cuenta (@${matchedUser.username}) tiene asignado el rol de "${matchedUser.role.toUpperCase()}". No tienes permiso para ingresar al módulo de "${role.toUpperCase()}". Solicita al Administrador un cambio de rol en Supabase.`);
           setLoading(false);
           return;
         }
 
-        // If user data from Supabase was updated (e.g. role changed directly in Supabase), update local state
-        const userIndex = localUsers.findIndex(u => u.id === existing.id || u.username.toLowerCase() === cleanUsername);
-        if (userIndex >= 0) {
-          localUsers[userIndex] = existing;
+        // Synchronize in local state in case role was modified in Supabase
+        const uIndex = localUsers.findIndex(u => u.id === matchedUser!.id || u.username.toLowerCase() === matchedUser!.username.toLowerCase());
+        if (uIndex >= 0) {
+          localUsers[uIndex] = matchedUser;
           MockDatabase.saveUsers(localUsers);
         } else {
-          MockDatabase.saveUsers([...localUsers, existing]);
+          MockDatabase.saveUsers([...localUsers, matchedUser]);
         }
 
         MockDatabase.addAuditLog(
-          existing.name,
+          matchedUser.name,
           'Inicio de Sesión',
           'Seguridad',
-          `Acceso verificado para ${existing.name} (@${existing.username}) al módulo ${role.toUpperCase()}`
+          `Acceso verificado para ${matchedUser.name} (@${matchedUser.username}) al módulo ${role.toUpperCase()}`
         );
 
         recordSaveTelemetry({
           table: 'audit_logs',
-          folio: `LOG-${existing.role.toUpperCase()}-${Date.now().toString().slice(-4)}`,
-          action: `Acceso Exitoso (${existing.name})`,
+          folio: `LOG-${matchedUser.role.toUpperCase()}-${Date.now().toString().slice(-4)}`,
+          action: `Acceso Exitoso (${matchedUser.name})`,
           countBefore: 0,
           countAfter: 1,
           status: 'success',
-          payloadSummary: `Autenticación de @${existing.username} en ${role}`,
+          payloadSummary: `Autenticación de @${matchedUser.username} en ${role}`,
           source: 'cloud_sync'
         });
 
-        setSuccessMsg(`¡Bienvenido, ${existing.name}! Accediendo al sistema...`);
+        setSuccessMsg(`¡Bienvenido, ${matchedUser.name}! Accediendo al sistema...`);
         setTimeout(() => {
-          onSuccess(existing);
+          onSuccess(matchedUser!);
         }, 500);
       }
 
@@ -257,15 +325,16 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden relative">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200" id="role_auth_modal_overlay">
+      <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden relative" id="role_auth_modal_card">
         
         {/* Header with Pantone / Role gradient */}
         <div className={`bg-gradient-to-r ${currentMeta.color} p-6 text-white relative`}>
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 text-white/80 hover:text-white p-1.5 rounded-full hover:bg-white/10 transition-colors"
+            className="absolute top-4 right-4 text-white/80 hover:text-white p-1.5 rounded-full hover:bg-white/10 transition-colors cursor-pointer"
             title="Volver"
+            id="btn_close_auth_modal"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
@@ -279,7 +348,7 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
                 Módulo Seguro • Miauloo
               </span>
               <h3 className="text-xl font-extrabold tracking-tight text-white leading-tight">
-                {role === 'admin' ? 'Administrador' : role === 'production' ? 'Producción' : role === 'warehouse' ? 'Almacén' : role === 'sales' ? 'Ventas' : 'Entregas'}
+                {currentMeta.title}
               </h3>
             </div>
           </div>
@@ -292,15 +361,16 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
         <div className="p-6">
           
           {/* Mode Switcher Tabs */}
-          <div className="flex rounded-xl bg-slate-100 p-1 mb-6 border border-slate-200/80">
+          <div className="flex rounded-xl bg-slate-100 p-1 mb-5 border border-slate-200/80" id="auth_mode_tabs">
             <button
               type="button"
               onClick={() => { setIsRegisterMode(false); setError(null); setSuccessMsg(null); }}
-              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                 !isRegisterMode 
                   ? 'bg-white text-[#032B4E] shadow-sm' 
                   : 'text-slate-500 hover:text-slate-900'
               }`}
+              id="tab_login_mode"
             >
               <LogIn className="w-3.5 h-3.5" />
               <span>Iniciar Sesión</span>
@@ -308,38 +378,57 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
             <button
               type="button"
               onClick={() => { setIsRegisterMode(true); setError(null); setSuccessMsg(null); }}
-              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                 isRegisterMode 
                   ? 'bg-white text-[#032B4E] shadow-sm' 
                   : 'text-slate-500 hover:text-slate-900'
               }`}
+              id="tab_register_mode"
             >
               <UserPlus className="w-3.5 h-3.5" />
-              <span>Registrarse en {role === 'admin' ? 'Admin' : role === 'production' ? 'Producción' : role === 'warehouse' ? 'Almacén' : role === 'sales' ? 'Ventas' : 'Reparto'}</span>
+              <span>Registrarse</span>
             </button>
           </div>
 
+          {/* Quick Auto-fill banner for testing */}
+          {!isRegisterMode && defaultUserForRole && (
+            <div className="mb-4 p-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl flex items-center justify-between transition-colors">
+              <div className="text-[11px] text-slate-700 flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                <span>Operador demo: <strong>@{defaultUserForRole.username}</strong></span>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleQuickFill(defaultUserForRole.username, defaultUserForRole.pin)}
+                className="text-[10px] font-bold bg-[#032B4E] text-white px-2.5 py-1 rounded-md hover:bg-[#043b6b] transition-all cursor-pointer shadow-xs"
+              >
+                Autocompletar
+              </button>
+            </div>
+          )}
+
           {/* Feedback Messages */}
           {error && (
-            <div className="mb-4 p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-medium flex items-start gap-2.5 animate-shake">
+            <div className="mb-4 p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-medium flex items-start gap-2.5 animate-shake" id="auth_error_alert">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <div className="leading-snug">{error}</div>
             </div>
           )}
 
           {successMsg && (
-            <div className="mb-4 p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs font-medium flex items-center gap-2.5">
+            <div className="mb-4 p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs font-medium flex items-center gap-2.5" id="auth_success_alert">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
               <div className="leading-snug">{successMsg}</div>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-3.5" id="auth_role_form">
             
+            {/* Registro: Nombre Completo */}
             {isRegisterMode && (
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Nombre Completo
+                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Nombre Completo <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
                   <UserIcon className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
@@ -350,45 +439,88 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     className="w-full pl-9 pr-3 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#032B4E] focus:border-transparent transition-all"
+                    id="input_register_name"
                   />
                 </div>
               </div>
             )}
 
+            {/* Usuario / Identificador */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                Usuario / Identificador
+              <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                {isRegisterMode ? 'Nombre de Usuario' : 'Usuario o Correo Electrónico'} <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
                 <UserIcon className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                 <input
                   type="text"
                   required
-                  placeholder="Ej. roberto_alm"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder={isRegisterMode ? `Ej. ${currentMeta.defaultUserHint}` : `Ej. ${currentMeta.defaultUserHint} o correo`}
+                  value={usernameOrEmail}
+                  onChange={(e) => setUsernameOrEmail(e.target.value)}
                   className="w-full pl-9 pr-3 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#032B4E] focus:border-transparent transition-all"
+                  id="input_auth_username"
                 />
               </div>
             </div>
 
+            {/* Registro: Correo Electrónico */}
+            {isRegisterMode && (
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Correo Electrónico <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <input
+                    type="email"
+                    required
+                    placeholder="Ej. usuario@miauloo.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#032B4E] focus:border-transparent transition-all"
+                    id="input_register_email"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* PIN / Contraseña con Ojito para ver contraseña */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                PIN de Seguridad / Contraseña
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                  PIN de Seguridad / Contraseña <span className="text-rose-500">*</span>
+                </label>
+                <span className="text-[10px] text-slate-400 font-mono">Ej: {currentMeta.defaultPin}</span>
+              </div>
               <div className="relative">
                 <KeyRound className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   required
-                  placeholder="Ej. 1234"
+                  placeholder="Ingresa tu clave"
                   value={pin}
                   onChange={(e) => setPin(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#032B4E] focus:border-transparent transition-all"
+                  className="w-full pl-9 pr-10 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#032B4E] focus:border-transparent transition-all"
+                  id="input_auth_password"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-700 p-0.5 rounded transition-colors cursor-pointer"
+                  title={showPassword ? 'Ocultar contraseña' : 'Ver contraseña'}
+                  id="btn_toggle_password_visibility"
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-4 h-4 text-[#032B4E]" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
               </div>
             </div>
 
+            {/* Rol Asignado Automáticamente en Registro */}
             {isRegisterMode && (
               <div className="p-3 bg-sky-50 rounded-xl border border-sky-200/80 flex items-center justify-between">
                 <div className="text-[11px] text-sky-900">
@@ -404,10 +536,11 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-[#032B4E] hover:bg-[#043b6b] disabled:opacity-60 text-white font-extrabold text-xs uppercase tracking-wider py-3.5 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer mt-2"
+              className="w-full bg-[#032B4E] hover:bg-[#043b6b] disabled:opacity-60 text-white font-extrabold text-xs uppercase tracking-wider py-3.5 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer mt-3"
+              id="btn_submit_auth_form"
             >
               {loading ? (
-                <span>Procesando...</span>
+                <span>Verificando credenciales...</span>
               ) : isRegisterMode ? (
                 <>
                   <UserPlus className="w-4 h-4" />
@@ -422,27 +555,47 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
             </button>
           </form>
 
-          {/* Quick predefined demo users hint */}
+          {/* Predefined demo accounts footer */}
           <div className="mt-5 pt-4 border-t border-slate-100 text-center">
-            <p className="text-[11px] text-slate-500 font-medium">
-              ¿Quieres probar con los usuarios por defecto?
+            <p className="text-[11px] text-slate-500 font-medium mb-1.5">
+              Usuarios oficiales predefinidos (Haz clic para usar):
             </p>
-            <div className="mt-1.5 flex flex-wrap justify-center gap-1.5 text-[10px] text-slate-600">
-              <span className="bg-slate-100 px-2 py-0.5 rounded font-mono">
-                Admin: <b>jonathan</b> (PIN: 1111)
-              </span>
-              <span className="bg-slate-100 px-2 py-0.5 rounded font-mono">
-                Prod: <b>diana_prod</b> (PIN: 2222)
-              </span>
-              <span className="bg-slate-100 px-2 py-0.5 rounded font-mono">
-                Alm: <b>carlos_alm</b> (PIN: 3333)
-              </span>
-              <span className="bg-slate-100 px-2 py-0.5 rounded font-mono">
-                Vtas: <b>mariana_vta</b> (PIN: 4444)
-              </span>
-              <span className="bg-slate-100 px-2 py-0.5 rounded font-mono">
-                Rep: <b>pedro_rep</b> (PIN: 5555)
-              </span>
+            <div className="flex flex-wrap justify-center gap-1.5 text-[10px] text-slate-600">
+              <button
+                type="button"
+                onClick={() => handleQuickFill('jonathan', '1111')}
+                className="bg-slate-100 hover:bg-amber-100 hover:text-amber-900 px-2 py-1 rounded-md font-mono border border-slate-200 transition-colors cursor-pointer"
+              >
+                Admin: <b>jonathan</b> (1111)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleQuickFill('diana_prod', '2222')}
+                className="bg-slate-100 hover:bg-cyan-100 hover:text-cyan-900 px-2 py-1 rounded-md font-mono border border-slate-200 transition-colors cursor-pointer"
+              >
+                Prod: <b>diana_prod</b> (2222)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleQuickFill('carlos_alm', '3333')}
+                className="bg-slate-100 hover:bg-orange-100 hover:text-orange-900 px-2 py-1 rounded-md font-mono border border-slate-200 transition-colors cursor-pointer"
+              >
+                Alm: <b>carlos_alm</b> (3333)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleQuickFill('mariana_vta', '4444')}
+                className="bg-slate-100 hover:bg-purple-100 hover:text-purple-900 px-2 py-1 rounded-md font-mono border border-slate-200 transition-colors cursor-pointer"
+              >
+                Vtas: <b>mariana_vta</b> (4444)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleQuickFill('pedro_rep', '5555')}
+                className="bg-slate-100 hover:bg-blue-100 hover:text-blue-900 px-2 py-1 rounded-md font-mono border border-slate-200 transition-colors cursor-pointer"
+              >
+                Rep: <b>pedro_rep</b> (5555)
+              </button>
             </div>
           </div>
 

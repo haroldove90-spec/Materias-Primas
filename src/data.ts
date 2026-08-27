@@ -1,11 +1,11 @@
 import { RawMaterial, Formula, ProductionOrder, StockMovement, Client, Sale, DeliveryRoute, AuditLog, User, SystemConfig, PurchaseOrder, TransferSheet, SaleNote } from './types';
 
 export const INITIAL_USERS: User[] = [
-  { id: 'u-1', name: 'Jonathan (Gerente)', username: 'jonathan', role: 'admin', pin: '1111', active: true, permissions: ['dashboard', 'finanzas', 'configuracion'] },
-  { id: 'u-2', name: 'Diana (Producción)', username: 'diana_prod', role: 'production', pin: '2222', active: true, permissions: ['formulas', 'ordenes'] },
-  { id: 'u-3', name: 'Carlos (Almacenista)', username: 'carlos_alm', role: 'warehouse', pin: '3333', active: true, permissions: ['inventario', 'trazabilidad'] },
-  { id: 'u-4', name: 'Mariana (Agente Ventas)', username: 'mariana_vta', role: 'sales', pin: '4444', active: true, permissions: ['crm', 'caja'] },
-  { id: 'u-5', name: 'Pedro (Repartidor)', username: 'pedro_rep', role: 'delivery', pin: '5555', active: true, permissions: ['entregas'] },
+  { id: 'u-1', name: 'Jonathan (Gerente)', username: 'jonathan', email: 'gerencia@miauloo.com', role: 'admin', pin: '1111', active: true, permissions: ['dashboard', 'finanzas', 'configuracion'] },
+  { id: 'u-2', name: 'Diana (Producción)', username: 'diana_prod', email: 'produccion@miauloo.com', role: 'production', pin: '2222', active: true, permissions: ['formulas', 'ordenes'] },
+  { id: 'u-3', name: 'Carlos (Almacenista)', username: 'carlos_alm', email: 'almacen@miauloo.com', role: 'warehouse', pin: '3333', active: true, permissions: ['inventario', 'trazabilidad'] },
+  { id: 'u-4', name: 'Mariana (Agente Ventas)', username: 'mariana_vta', email: 'ventas@miauloo.com', role: 'sales', pin: '4444', active: true, permissions: ['crm', 'caja'] },
+  { id: 'u-5', name: 'Pedro (Repartidor)', username: 'pedro_rep', email: 'reparto@miauloo.com', role: 'delivery', pin: '5555', active: true, permissions: ['entregas'] },
 ];
 
 export const INITIAL_RAW_MATERIALS: RawMaterial[] = [

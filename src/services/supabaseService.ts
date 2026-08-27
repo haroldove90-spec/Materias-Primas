@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS public.users (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     username TEXT UNIQUE NOT NULL,
+    email TEXT,
     role TEXT NOT NULL CHECK (role IN ('admin', 'production', 'warehouse', 'sales', 'delivery')),
     pin TEXT NOT NULL,
     active BOOLEAN NOT NULL DEFAULT true,
@@ -279,16 +280,17 @@ CREATE POLICY "Permitir todo a anon system_config" ON public.system_config FOR A
 -- ==============================================================================
 
 -- 1. USUARIOS
-INSERT INTO public.users (id, name, username, role, pin, active, permissions)
+INSERT INTO public.users (id, name, username, email, role, pin, active, permissions)
 VALUES
-('u-1', 'Jonathan (Gerente)', 'jonathan', 'admin', '1111', true, '["dashboard", "finanzas", "configuracion"]'::jsonb),
-('u-2', 'Diana (Producción)', 'diana_prod', 'production', '2222', true, '["formulas", "ordenes"]'::jsonb),
-('u-3', 'Carlos (Almacenista)', 'carlos_alm', 'warehouse', '3333', true, '["inventario", "trazabilidad"]'::jsonb),
-('u-4', 'Mariana (Agente Ventas)', 'mariana_vta', 'sales', '4444', true, '["crm", "caja"]'::jsonb),
-('u-5', 'Pedro (Repartidor)', 'pedro_rep', 'delivery', '5555', true, '["entregas"]'::jsonb)
+('u-1', 'Jonathan (Gerente)', 'jonathan', 'gerencia@miauloo.com', 'admin', '1111', true, '["dashboard", "finanzas", "configuracion"]'::jsonb),
+('u-2', 'Diana (Producción)', 'diana_prod', 'produccion@miauloo.com', 'production', '2222', true, '["formulas", "ordenes"]'::jsonb),
+('u-3', 'Carlos (Almacenista)', 'carlos_alm', 'almacen@miauloo.com', 'warehouse', '3333', true, '["inventario", "trazabilidad"]'::jsonb),
+('u-4', 'Mariana (Agente Ventas)', 'mariana_vta', 'ventas@miauloo.com', 'sales', '4444', true, '["crm", "caja"]'::jsonb),
+('u-5', 'Pedro (Repartidor)', 'pedro_rep', 'reparto@miauloo.com', 'delivery', '5555', true, '["entregas"]'::jsonb)
 ON CONFLICT (id) DO UPDATE SET 
     name = EXCLUDED.name,
     username = EXCLUDED.username,
+    email = EXCLUDED.email,
     role = EXCLUDED.role,
     pin = EXCLUDED.pin,
     active = EXCLUDED.active,
@@ -488,6 +490,7 @@ export async function seedSupabaseFromClient(): Promise<{ success: boolean; mess
         id: u.id,
         name: u.name,
         username: u.username,
+        email: u.email,
         role: u.role,
         pin: u.pin,
         active: u.active,
