@@ -275,6 +275,7 @@ export default function App() {
         {/* Modal de Acceso y Registro específico por Rol */}
         {authModalRole && (
           <RoleAuthModal
+            isOpen={true}
             role={authModalRole}
             onClose={() => setAuthModalRole(null)}
             onSuccess={handleAuthSuccess}
@@ -484,6 +485,16 @@ export default function App() {
         onClose={() => setShowSupabaseModal(false)} 
         initialTab={modalInitialTab}
       />
+
+      {/* Modal de Acceso y Registro específico por Rol */}
+      {authModalRole && (
+        <RoleAuthModal
+          isOpen={true}
+          role={authModalRole}
+          onClose={() => setAuthModalRole(null)}
+          onSuccess={handleAuthSuccess}
+        />
+      )}
 
       {/* 4. MOBILE/TABLET BOTTOM NAVIGATION BAR (lg:hidden) */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-slate-200 z-50 flex items-center justify-around px-2 shadow-lg shrink-0">

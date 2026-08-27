@@ -6,13 +6,13 @@ import { supabase } from '../lib/supabase';
 import { recordSaveTelemetry } from '../services/supabaseTelemetry';
 
 interface RoleAuthModalProps {
-  isOpen: boolean;
+  isOpen?: boolean;
   role: RoleType;
   onClose: () => void;
   onSuccess: (user: User) => void;
 }
 
-export function RoleAuthModal({ isOpen, role, onClose, onSuccess }: RoleAuthModalProps) {
+export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleAuthModalProps) {
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [username, setUsername] = useState('');
   const [pin, setPin] = useState('');
