@@ -199,15 +199,7 @@ export default function App() {
         <div className="absolute bottom-0 left-0 w-80 h-80 bg-indigo-50/50 rounded-full blur-[100px] pointer-events-none" />
 
         {/* Corporate Header */}
-        <header className="max-w-4xl mx-auto w-full text-center py-8 shrink-0 relative z-10 flex flex-col items-center">
-          {/* Botón Inteligente Supabase con Semáforo en Vivo & Latencia en ms */}
-          <div className="mb-4">
-            <SupabaseSmartButton 
-              onClick={() => openSupabaseWithTab('status')}
-              variant="pill"
-            />
-          </div>
-
+        <header className="max-w-4xl mx-auto w-full text-center py-6 sm:py-8 shrink-0 relative z-10 flex flex-col items-center">
           {/* Unencapsulated Miauloo Logo */}
           <div className="flex justify-center items-center mb-3">
             <img 
@@ -441,11 +433,13 @@ export default function App() {
 
         {/* Bottom profile, Supabase DB & home button */}
         <div className="p-4 border-t border-slate-100 bg-slate-50/50 space-y-2.5">
-          {/* Supabase Smart Card Button */}
-          <SupabaseSmartButton 
-            onClick={() => openSupabaseWithTab('status')}
-            variant="card"
-          />
+          {/* Supabase Smart Card Button - SÓLO VISIBLE EN ROL ADMIN */}
+          {currentUser?.role === 'admin' && (
+            <SupabaseSmartButton 
+              onClick={() => openSupabaseWithTab('status')}
+              variant="card"
+            />
+          )}
 
           <div className="flex items-center justify-between px-2 pt-1">
             <div className="flex flex-col">

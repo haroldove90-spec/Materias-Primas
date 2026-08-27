@@ -484,8 +484,8 @@ export async function seedSupabaseFromClient(): Promise<{ success: boolean; mess
   try {
     const results: Record<string, any> = {};
 
-    // 1. Users
-    const { error: errUsers } = await supabase.from('users').upsert(
+    // 1. Users (with multi-tier fallback for schema compatibility)
+    let { error: errUsers } = await supabase.from('users').upsert(
       INITIAL_USERS.map(u => ({
         id: u.id,
         name: u.name,
@@ -497,6 +497,19 @@ export async function seedSupabaseFromClient(): Promise<{ success: boolean; mess
         permissions: u.permissions
       }))
     );
+
+    if (errUsers) {
+      const { error: coreErr } = await supabase.from('users').upsert(
+        INITIAL_USERS.map(u => ({
+          id: u.id,
+          name: u.name,
+          username: u.username,
+          role: u.role,
+          pin: u.pin
+        }))
+      );
+      errUsers = coreErr;
+    }
     results.users = errUsers ? errUsers.message : 'OK';
 
     // 2. Raw Materials

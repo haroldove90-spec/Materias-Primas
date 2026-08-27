@@ -7,7 +7,7 @@ import { MockDatabase } from '../data';
 import { RawMaterial, Client, Sale, AuditLog, User, SystemConfig, RoleType } from '../types';
 import { exportToExcel, exportToPDF } from '../utils/exportUtils';
 import { SupabaseModal } from './SupabaseModal';
-import { SUPABASE_PROJECT_INFO, SUPABASE_URL } from '../lib/supabase';
+import { SUPABASE_PROJECT_INFO, SUPABASE_URL, supabase } from '../lib/supabase';
 import { updateUserRoleInSupabase } from '../services/supabaseService';
 import { recordSaveTelemetry } from '../services/supabaseTelemetry';
 
@@ -94,7 +94,7 @@ export default function AdminRole({ onBack, currentUser, activeTab: propsActiveT
   ];
 
   // Handler para agregar empleado
-  const handleAddEmployee = (e: React.FormEvent) => {
+  const handleAddEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newEmpName || !newEmpUsername || !newEmpPin) return;
 
@@ -111,6 +111,34 @@ export default function AdminRole({ onBack, currentUser, activeTab: propsActiveT
 
     const updatedUsers = [...users, newEmployee];
     MockDatabase.saveUsers(updatedUsers);
+
+    // Sync to Supabase with multi-tier fallback
+    try {
+      const { error: fullErr } = await supabase.from('users').upsert({
+        id: newEmployee.id,
+        name: newEmployee.name,
+        username: newEmployee.username,
+        email: newEmployee.email,
+        role: newEmployee.role,
+        pin: newEmployee.pin,
+        active: newEmployee.active,
+        permissions: newEmployee.permissions
+      });
+
+      if (fullErr) {
+        // Fallback to core columns
+        await supabase.from('users').upsert({
+          id: newEmployee.id,
+          name: newEmployee.name,
+          username: newEmployee.username,
+          role: newEmployee.role,
+          pin: newEmployee.pin
+        });
+      }
+    } catch (sbErr) {
+      console.log('Error syncing new employee to Supabase:', sbErr);
+    }
+
     MockDatabase.addAuditLog(
       currentUser.name,
       `Creó empleado: ${newEmpName}`,
@@ -127,13 +155,20 @@ export default function AdminRole({ onBack, currentUser, activeTab: propsActiveT
   };
 
   // Handler para dar de baja empleado
-  const handleRemoveEmployee = (id: string, name: string) => {
+  const handleRemoveEmployee = async (id: string, name: string) => {
     if (id === currentUser.id) {
       alert("No puedes darte de baja a ti mismo.");
       return;
     }
     const updatedUsers = users.filter(u => u.id !== id);
     MockDatabase.saveUsers(updatedUsers);
+
+    try {
+      await supabase.from('users').delete().eq('id', id);
+    } catch (sbErr) {
+      console.log('Error deleting employee from Supabase:', sbErr);
+    }
+
     MockDatabase.addAuditLog(
       currentUser.name,
       `Dio de baja al empleado: ${name}`,

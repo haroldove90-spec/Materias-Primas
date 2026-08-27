@@ -174,9 +174,10 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
         const updatedLocal = [...localUsers, newUser];
         MockDatabase.saveUsers(updatedLocal);
 
-        // 2. Insert into Supabase if connected
+        // 2. Insert into Supabase with multi-tier fallback
         try {
-          await supabase.from('users').upsert({
+          // Tier 1: Try full schema (id, name, username, email, role, pin, active, permissions)
+          const { error: fullSchemaErr } = await supabase.from('users').upsert({
             id: newUser.id,
             name: newUser.name,
             username: newUser.username,
@@ -186,8 +187,23 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
             active: newUser.active,
             permissions: newUser.permissions
           });
-        } catch (sbErr) {
-          console.log('Error syncing user to Supabase (se guardó en local):', sbErr);
+
+          if (fullSchemaErr) {
+            console.warn('Supabase full schema insert failed, trying core columns fallback:', fullSchemaErr.message);
+            // Tier 2: Fallback to core columns (id, name, username, role, pin)
+            const { error: coreErr } = await supabase.from('users').upsert({
+              id: newUser.id,
+              name: newUser.name,
+              username: newUser.username,
+              role: newUser.role,
+              pin: newUser.pin
+            });
+            if (coreErr) {
+              console.error('Supabase core insert error (check RLS / columns in Supabase):', coreErr.message);
+            }
+          }
+        } catch (sbErr: any) {
+          console.warn('Error syncing user to Supabase (guardado localmente):', sbErr?.message || sbErr);
         }
 
         // 3. Log event and record telemetry
@@ -325,47 +341,47 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200" id="role_auth_modal_overlay">
-      <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden relative" id="role_auth_modal_card">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200" id="role_auth_modal_overlay">
+      <div className="bg-white w-full max-w-md rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col my-auto max-h-[94dvh] sm:max-h-[90vh] relative" id="role_auth_modal_card">
         
         {/* Header with Pantone / Role gradient */}
-        <div className={`bg-gradient-to-r ${currentMeta.color} p-6 text-white relative`}>
+        <div className={`bg-gradient-to-r ${currentMeta.color} p-3.5 sm:p-5 text-white relative shrink-0`}>
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 text-white/80 hover:text-white p-1.5 rounded-full hover:bg-white/10 transition-colors cursor-pointer"
+            className="absolute top-2.5 right-2.5 sm:top-3.5 sm:right-3.5 text-white/80 hover:text-white p-1.5 rounded-full hover:bg-white/10 transition-colors cursor-pointer"
             title="Volver"
             id="btn_close_auth_modal"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
 
-          <div className="flex items-center space-x-3 mb-2">
-            <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center text-white shadow-inner">
-              <IconComponent className="w-6 h-6" />
+          <div className="flex items-center space-x-2.5 sm:space-x-3 mb-1 sm:mb-1.5">
+            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center text-white shadow-inner shrink-0">
+              <IconComponent className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
-            <div>
-              <span className="text-[10px] font-extrabold uppercase tracking-widest text-white/80 block">
+            <div className="min-w-0 pr-6">
+              <span className="text-[9px] sm:text-[10px] font-extrabold uppercase tracking-widest text-white/80 block truncate">
                 Módulo Seguro • Miauloo
               </span>
-              <h3 className="text-xl font-extrabold tracking-tight text-white leading-tight">
+              <h3 className="text-base sm:text-xl font-extrabold tracking-tight text-white leading-tight truncate">
                 {currentMeta.title}
               </h3>
             </div>
           </div>
-          <p className="text-xs text-white/90 font-medium leading-relaxed mt-2">
+          <p className="text-[11px] sm:text-xs text-white/90 font-medium leading-snug mt-1 sm:mt-1.5 line-clamp-2">
             {currentMeta.subtitle}
           </p>
         </div>
 
-        {/* Form Body */}
-        <div className="p-6">
+        {/* Form Body - Scrollable Container for Mobile */}
+        <div className="p-3.5 sm:p-6 overflow-y-auto flex-1 overscroll-contain space-y-3 sm:space-y-3.5">
           
           {/* Mode Switcher Tabs */}
-          <div className="flex rounded-xl bg-slate-100 p-1 mb-5 border border-slate-200/80" id="auth_mode_tabs">
+          <div className="flex rounded-xl bg-slate-100 p-1 mb-3 border border-slate-200/80 shrink-0" id="auth_mode_tabs">
             <button
               type="button"
               onClick={() => { setIsRegisterMode(false); setError(null); setSuccessMsg(null); }}
-              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              className={`flex-1 py-1.5 sm:py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                 !isRegisterMode 
                   ? 'bg-white text-[#032B4E] shadow-sm' 
                   : 'text-slate-500 hover:text-slate-900'
@@ -378,7 +394,7 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
             <button
               type="button"
               onClick={() => { setIsRegisterMode(true); setError(null); setSuccessMsg(null); }}
-              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              className={`flex-1 py-1.5 sm:py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                 isRegisterMode 
                   ? 'bg-white text-[#032B4E] shadow-sm' 
                   : 'text-slate-500 hover:text-slate-900'
@@ -392,15 +408,15 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
 
           {/* Quick Auto-fill banner for testing */}
           {!isRegisterMode && defaultUserForRole && (
-            <div className="mb-4 p-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl flex items-center justify-between transition-colors">
-              <div className="text-[11px] text-slate-700 flex items-center gap-1.5">
+            <div className="p-2 sm:p-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl flex items-center justify-between transition-colors">
+              <div className="text-[11px] text-slate-700 flex items-center gap-1.5 truncate pr-2">
                 <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                <span>Operador demo: <strong>@{defaultUserForRole.username}</strong></span>
+                <span className="truncate">Operador: <strong>@{defaultUserForRole.username}</strong></span>
               </div>
               <button
                 type="button"
                 onClick={() => handleQuickFill(defaultUserForRole.username, defaultUserForRole.pin)}
-                className="text-[10px] font-bold bg-[#032B4E] text-white px-2.5 py-1 rounded-md hover:bg-[#043b6b] transition-all cursor-pointer shadow-xs"
+                className="text-[10px] font-bold bg-[#032B4E] text-white px-2.5 py-1 rounded-md hover:bg-[#043b6b] transition-all cursor-pointer shadow-xs shrink-0"
               >
                 Autocompletar
               </button>
@@ -409,20 +425,20 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
 
           {/* Feedback Messages */}
           {error && (
-            <div className="mb-4 p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-medium flex items-start gap-2.5 animate-shake" id="auth_error_alert">
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-medium flex items-start gap-2.5 animate-shake" id="auth_error_alert">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <div className="leading-snug">{error}</div>
             </div>
           )}
 
           {successMsg && (
-            <div className="mb-4 p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs font-medium flex items-center gap-2.5" id="auth_success_alert">
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs font-medium flex items-center gap-2.5" id="auth_success_alert">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
               <div className="leading-snug">{successMsg}</div>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-3.5" id="auth_role_form">
+          <form onSubmit={handleSubmit} className="space-y-3" id="auth_role_form">
             
             {/* Registro: Nombre Completo */}
             {isRegisterMode && (
@@ -438,7 +454,7 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
                     placeholder="Ej. Roberto Sánchez Gómez"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#032B4E] focus:border-transparent transition-all"
+                    className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#032B4E] focus:border-transparent transition-all"
                     id="input_register_name"
                   />
                 </div>
@@ -458,7 +474,7 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
                   placeholder={isRegisterMode ? `Ej. ${currentMeta.defaultUserHint}` : `Ej. ${currentMeta.defaultUserHint} o correo`}
                   value={usernameOrEmail}
                   onChange={(e) => setUsernameOrEmail(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#032B4E] focus:border-transparent transition-all"
+                  className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#032B4E] focus:border-transparent transition-all"
                   id="input_auth_username"
                 />
               </div>
@@ -478,7 +494,7 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
                     placeholder="Ej. usuario@miauloo.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#032B4E] focus:border-transparent transition-all"
+                    className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#032B4E] focus:border-transparent transition-all"
                     id="input_register_email"
                   />
                 </div>
@@ -501,13 +517,13 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
                   placeholder="Ingresa tu clave"
                   value={pin}
                   onChange={(e) => setPin(e.target.value)}
-                  className="w-full pl-9 pr-10 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#032B4E] focus:border-transparent transition-all"
+                  className="w-full pl-9 pr-10 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#032B4E] focus:border-transparent transition-all"
                   id="input_auth_password"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-700 p-0.5 rounded transition-colors cursor-pointer"
+                  className="absolute right-3 top-2 text-slate-400 hover:text-slate-700 p-1 rounded transition-colors cursor-pointer"
                   title={showPassword ? 'Ocultar contraseña' : 'Ver contraseña'}
                   id="btn_toggle_password_visibility"
                 >
@@ -522,12 +538,12 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
 
             {/* Rol Asignado Automáticamente en Registro */}
             {isRegisterMode && (
-              <div className="p-3 bg-sky-50 rounded-xl border border-sky-200/80 flex items-center justify-between">
+              <div className="p-2.5 bg-sky-50 rounded-xl border border-sky-200/80 flex items-center justify-between">
                 <div className="text-[11px] text-sky-900">
                   <span className="font-bold block">Rol Asignado Automáticamente:</span>
                   <span>{currentMeta.title}</span>
                 </div>
-                <span className={`text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-md border ${currentMeta.badge}`}>
+                <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md border ${currentMeta.badge}`}>
                   {role.toUpperCase()}
                 </span>
               </div>
@@ -536,7 +552,7 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-[#032B4E] hover:bg-[#043b6b] disabled:opacity-60 text-white font-extrabold text-xs uppercase tracking-wider py-3.5 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer mt-3"
+              className="w-full bg-[#032B4E] hover:bg-[#043b6b] disabled:opacity-60 text-white font-extrabold text-xs uppercase tracking-wider py-3 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer mt-2"
               id="btn_submit_auth_form"
             >
               {loading ? (
@@ -556,45 +572,45 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
           </form>
 
           {/* Predefined demo accounts footer */}
-          <div className="mt-5 pt-4 border-t border-slate-100 text-center">
-            <p className="text-[11px] text-slate-500 font-medium mb-1.5">
-              Usuarios oficiales predefinidos (Haz clic para usar):
+          <div className="mt-4 pt-3 border-t border-slate-100 text-center">
+            <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium mb-1.5">
+              Usuarios oficiales predefinidos (Haz clic para autocompletar):
             </p>
-            <div className="flex flex-wrap justify-center gap-1.5 text-[10px] text-slate-600">
+            <div className="flex flex-wrap justify-center gap-1 text-[10px] text-slate-600">
               <button
                 type="button"
                 onClick={() => handleQuickFill('jonathan', '1111')}
-                className="bg-slate-100 hover:bg-amber-100 hover:text-amber-900 px-2 py-1 rounded-md font-mono border border-slate-200 transition-colors cursor-pointer"
+                className="bg-slate-100 hover:bg-amber-100 hover:text-amber-900 px-2 py-0.5 rounded font-mono border border-slate-200 transition-colors cursor-pointer"
               >
-                Admin: <b>jonathan</b> (1111)
+                Admin: <b>jonathan</b>
               </button>
               <button
                 type="button"
                 onClick={() => handleQuickFill('diana_prod', '2222')}
-                className="bg-slate-100 hover:bg-cyan-100 hover:text-cyan-900 px-2 py-1 rounded-md font-mono border border-slate-200 transition-colors cursor-pointer"
+                className="bg-slate-100 hover:bg-cyan-100 hover:text-cyan-900 px-2 py-0.5 rounded font-mono border border-slate-200 transition-colors cursor-pointer"
               >
-                Prod: <b>diana_prod</b> (2222)
+                Prod: <b>diana_prod</b>
               </button>
               <button
                 type="button"
                 onClick={() => handleQuickFill('carlos_alm', '3333')}
-                className="bg-slate-100 hover:bg-orange-100 hover:text-orange-900 px-2 py-1 rounded-md font-mono border border-slate-200 transition-colors cursor-pointer"
+                className="bg-slate-100 hover:bg-orange-100 hover:text-orange-900 px-2 py-0.5 rounded font-mono border border-slate-200 transition-colors cursor-pointer"
               >
-                Alm: <b>carlos_alm</b> (3333)
+                Alm: <b>carlos_alm</b>
               </button>
               <button
                 type="button"
                 onClick={() => handleQuickFill('mariana_vta', '4444')}
-                className="bg-slate-100 hover:bg-purple-100 hover:text-purple-900 px-2 py-1 rounded-md font-mono border border-slate-200 transition-colors cursor-pointer"
+                className="bg-slate-100 hover:bg-purple-100 hover:text-purple-900 px-2 py-0.5 rounded font-mono border border-slate-200 transition-colors cursor-pointer"
               >
-                Vtas: <b>mariana_vta</b> (4444)
+                Vtas: <b>mariana_vta</b>
               </button>
               <button
                 type="button"
                 onClick={() => handleQuickFill('pedro_rep', '5555')}
-                className="bg-slate-100 hover:bg-blue-100 hover:text-blue-900 px-2 py-1 rounded-md font-mono border border-slate-200 transition-colors cursor-pointer"
+                className="bg-slate-100 hover:bg-blue-100 hover:text-blue-900 px-2 py-0.5 rounded font-mono border border-slate-200 transition-colors cursor-pointer"
               >
-                Rep: <b>pedro_rep</b> (5555)
+                Rep: <b>pedro_rep</b>
               </button>
             </div>
           </div>
