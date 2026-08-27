@@ -198,24 +198,36 @@ export default function DeliveryRole({ onBack, currentUser }: DeliveryRoleProps)
   const selectedSale = selectedRoute ? sales.find(s => s.id === selectedRoute.saleId) : null;
   const isPaymentPending = selectedSale?.paymentType === 'Contado' && selectedSale.amountPaid === 0;
 
+  const MIAULOO_LOGO = 'https://mwtzisudncwrlsizmgap.supabase.co/storage/v1/object/public/logo/miauloo.png';
+
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex justify-center font-sans" id="delivery_root">
       
       {/* PHONE CONTAINER MOCKUP (Optimized for Mobile view) */}
       <div className="w-full max-w-md bg-slate-950 flex flex-col min-h-screen border-x border-slate-800 shadow-2xl relative">
         
-        {/* Mobile Header bar */}
-        <header className="bg-slate-900 py-4 px-4 flex justify-between items-center border-b border-slate-800 sticky top-0 z-40">
+        {/* Mobile Header bar - Pantone #032B4E with unencapsulated logo, title & subtitle (Visible only on Desktop lg:) */}
+        <header className="hidden lg:flex bg-[#032B4E] py-3 px-4 justify-between items-center border-b border-[#043b6b] sticky top-0 z-40 shadow-md">
           <div className="flex items-center space-x-2.5">
-            <Truck className="w-5 h-5 text-amber-500 animate-bounce" />
+            <img 
+              src={MIAULOO_LOGO} 
+              alt="Miauloo" 
+              className="h-9 w-auto object-contain shrink-0" 
+              referrerPolicy="no-referrer"
+            />
             <div>
-              <h2 className="text-sm font-extrabold tracking-tight">Ruta de Distribución</h2>
-              <span className="text-[10px] text-slate-400 block">Conductor: {currentUser.name}</span>
+              <span className="text-[9px] font-extrabold tracking-wider text-sky-300 uppercase block">
+                Miauloo
+              </span>
+              <h2 className="text-sm font-extrabold tracking-tight text-white leading-tight">
+                Ruta de Distribución
+              </h2>
+              <span className="text-[10px] text-sky-200/80 block">Conductor: {currentUser.name}</span>
             </div>
           </div>
           <button 
             onClick={onBack}
-            className="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-3 py-1.5 rounded-lg border border-slate-700 transition-all"
+            className="text-[11px] bg-white/10 hover:bg-white/20 text-white font-bold px-3 py-1.5 rounded-lg border border-white/20 transition-all cursor-pointer"
             id="btn_deliv_logout"
           >
             Cerrar

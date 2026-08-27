@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Database, CheckCircle2, AlertTriangle, Copy, Download, RefreshCw, 
   ExternalLink, Server, Table, ShieldCheck, X, Sparkles, Check,
-  Zap, Clock, Layers, Activity, ArrowRight, Trash2, Send, Radio
+  Zap, Clock, Layers, Activity, ArrowRight, Trash2, Send, Radio, Code2
 } from 'lucide-react';
 import { 
   SUPABASE_SQL_SCRIPT, 
@@ -495,8 +495,54 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({
                 </div>
 
                 {syncStatusMsg && (
-                  <div className="p-3.5 bg-slate-900 text-emerald-400 rounded-xl text-xs font-mono border border-slate-800 flex items-center justify-between">
-                    <span>{syncStatusMsg}</span>
+                  <div className={`p-4 rounded-xl text-xs font-medium border space-y-2 ${
+                    syncStatusMsg.includes('exitosamente') || syncStatusMsg.includes('éxito')
+                      ? 'bg-emerald-950/70 border-emerald-500/40 text-emerald-300'
+                      : 'bg-rose-950/70 border-rose-500/50 text-rose-200'
+                  }`}>
+                    <div className="flex items-start gap-2">
+                      {syncStatusMsg.includes('exitosamente') ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                      ) : (
+                        <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                      )}
+                      <div>
+                        <p className="font-bold">{syncStatusMsg}</p>
+                        {!syncStatusMsg.includes('exitosamente') && (
+                          <p className="text-[11px] text-rose-300/80 mt-1">
+                            Para corregir esto: Ve a la pestaña <b>"Script SQL"</b>, copia el script y ejecútalo con el botón <b>RUN</b> en tu consola de Supabase.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {!syncStatusMsg.includes('exitosamente') && (
+                      <div className="pt-2 border-t border-rose-900/50 flex flex-wrap items-center gap-2">
+                        <button
+                          onClick={handleCopySQL}
+                          className="bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                        >
+                          {copied ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                          {copied ? '¡Script SQL Copiado!' : '1. Copiar Script SQL'}
+                        </button>
+                        <button
+                          onClick={() => setActiveTab('sql')}
+                          className="bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer"
+                        >
+                          <Code2 className="w-3.5 h-3.5 text-indigo-400" />
+                          2. Ver Script SQL
+                        </button>
+                        <a
+                          href={`https://supabase.com/dashboard/project/${SUPABASE_PROJECT_INFO.projectId}/sql/new`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all shadow-xs"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          3. Abrir SQL Editor en Supabase
+                        </a>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

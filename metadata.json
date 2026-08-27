@@ -1,6 +1,6 @@
 {
-  "name": "Materias primas",
-  "description": "Dashboard para gestionar fórmulas, inventario, producción, ventas y entregas de materias primas por roles.",
+  "name": "Miauloo",
+  "description": "Miauloo - Soluciones integrales de abasto. Gestión de fórmulas, inventario, producción, ventas y entregas.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

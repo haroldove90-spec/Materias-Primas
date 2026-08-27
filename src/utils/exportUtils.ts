@@ -73,12 +73,12 @@ export function exportToPDF(
       <style>
         @page { size: A4 landscape; margin: 15mm; }
         body { font-family: system-ui, -apple-system, sans-serif; font-size: 11px; color: #1e293b; margin: 0; padding: 20px; }
-        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0b2545; padding-bottom: 12px; margin-bottom: 16px; }
-        .title { font-size: 18px; font-weight: bold; color: #0b2545; margin: 0; text-transform: uppercase; }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #032B4E; padding-bottom: 12px; margin-bottom: 16px; }
+        .title { font-size: 18px; font-weight: bold; color: #032B4E; margin: 0; text-transform: uppercase; }
         .subtitle { font-size: 10px; color: #64748b; margin-top: 4px; }
-        .logo-box { background: #0b2545; color: white; padding: 6px 14px; font-weight: 900; font-size: 14px; border-radius: 4px; letter-spacing: 1px; }
+        .brand-logo { height: 42px; width: auto; object-fit: contain; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 10px; }
-        th { background: #0b2545; color: white; text-align: left; padding: 8px 10px; font-weight: bold; text-transform: uppercase; font-size: 9px; }
+        th { background: #032B4E; color: white; text-align: left; padding: 8px 10px; font-weight: bold; text-transform: uppercase; font-size: 9px; }
         td { border-bottom: 1px solid #e2e8f0; padding: 8px 10px; }
         tr:nth-child(even) { background-color: #f8fafc; }
         .footer { margin-top: 24px; text-align: center; font-size: 9px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 10px; }
@@ -88,9 +88,9 @@ export function exportToPDF(
       <div class="header">
         <div>
           <h1 class="title">${title}</h1>
-          <div class="subtitle">MIAULOO Soluciones Integrales - Reporte Generado: ${dateStr}</div>
+          <div class="subtitle">Miauloo - Soluciones integrales de abasto • Reporte Generado: ${dateStr}</div>
         </div>
-        <div class="logo-box">MIAULOO</div>
+        <img src="https://mwtzisudncwrlsizmgap.supabase.co/storage/v1/object/public/logo/miauloo.png" alt="Miauloo" class="brand-logo" />
       </div>
 
       <table>

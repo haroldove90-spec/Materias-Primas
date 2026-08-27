@@ -277,6 +277,13 @@ export async function syncAuditAndAccessLogs(options?: { onProgress?: (msg: stri
     const latency = Math.max(1, Math.round(performance.now() - startTime));
 
     if (error) {
+      let friendlyError = error.message;
+      if (error.message.includes('does not exist') || (error as any).code === '42P01' || error.message.includes('relation "public.audit_logs"')) {
+        friendlyError = 'La tabla "public.audit_logs" no ha sido creada aún en Supabase. Ejecuta el script SQL en el SQL Editor de Supabase para crear las 13 tablas.';
+      } else if (error.message.includes('row-level security') || error.message.includes('permission denied')) {
+        friendlyError = 'Políticas de seguridad (RLS) pendientes. Ejecuta el script SQL para habilitar permisos de lectura/escritura.';
+      }
+
       // If table does not exist or network fails
       const telRecord = await recordSaveTelemetry({
         table: 'audit_logs',
@@ -286,7 +293,7 @@ export async function syncAuditAndAccessLogs(options?: { onProgress?: (msg: stri
         countAfter: countBefore,
         latencyMs: latency,
         status: 'error',
-        errorMessage: error.message,
+        errorMessage: friendlyError,
         source: 'cloud_sync',
         payloadSummary: `${localLogs.length} eventos de auditoría pendientes`,
       });
@@ -295,7 +302,7 @@ export async function syncAuditAndAccessLogs(options?: { onProgress?: (msg: stri
         success: false,
         syncedCount: 0,
         latencyMs: latency,
-        message: `Fallo al sincronizar con Supabase: ${error.message}`,
+        message: friendlyError,
         record: telRecord,
       };
     }

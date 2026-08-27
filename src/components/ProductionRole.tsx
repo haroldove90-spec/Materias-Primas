@@ -487,22 +487,36 @@ export default function ProductionRole({ onBack, currentUser, activeTab: propsAc
     return ingCost + pkgCost + formula.laborCost + formula.otherCost;
   };
 
+  const MIAULOO_LOGO = 'https://mwtzisudncwrlsizmgap.supabase.co/storage/v1/object/public/logo/miauloo.png';
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans" id="production_root">
-      {/* Top Header */}
-      <header className="bg-slate-900 text-white shadow-md py-4 px-6 flex justify-between items-center shrink-0">
-        <div className="flex items-center space-x-3">
-          <div className="bg-cyan-500 text-slate-900 p-2 rounded-lg font-bold shadow-md">
-            <Beaker className="w-6 h-6 animate-pulse" />
-          </div>
+      {/* Top Header - Pantone #032B4E with unencapsulated logo, title & subtitle (Visible only on Desktop lg:) */}
+      <header className="hidden lg:flex bg-[#032B4E] text-white shadow-md py-3.5 px-4 md:px-6 justify-between items-center shrink-0 border-b border-[#043b6b]">
+        <div className="flex items-center space-x-3.5">
+          <img 
+            src={MIAULOO_LOGO} 
+            alt="Miauloo" 
+            className="h-10 md:h-11 w-auto object-contain shrink-0" 
+            referrerPolicy="no-referrer"
+          />
           <div>
-            <h1 className="text-xl font-semibold tracking-tight">Producción y Preparación de Mezclas</h1>
-            <p className="text-xs text-slate-400">Operador activo: <span className="text-cyan-400 font-medium">{currentUser.name}</span></p>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] md:text-xs font-extrabold tracking-wider text-sky-300 uppercase">
+                Miauloo • Soluciones integrales de abasto
+              </span>
+            </div>
+            <h1 className="text-lg md:text-xl font-bold tracking-tight text-white leading-tight">
+              Producción y Preparación de Mezclas
+            </h1>
+            <p className="text-xs text-sky-200/80">
+              Operador activo: <span className="text-cyan-300 font-semibold">{currentUser.name}</span>
+            </p>
           </div>
         </div>
         <button 
           onClick={onBack}
-          className="bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-4 py-2 rounded-lg text-sm transition-all shadow-sm border border-slate-700"
+          className="bg-white/10 hover:bg-white/20 text-white px-3.5 py-2 rounded-xl text-xs md:text-sm font-semibold transition-all shadow-xs border border-white/20 cursor-pointer"
           id="btn_prod_logout"
         >
           Cerrar Sesión Producción

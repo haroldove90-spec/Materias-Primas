@@ -676,23 +676,37 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
     alert(`Nota de Venta No. ${snNoteNo} guardada correctamente.`);
   };
 
+  const MIAULOO_LOGO = 'https://mwtzisudncwrlsizmgap.supabase.co/storage/v1/object/public/logo/miauloo.png';
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans" id="sales_root">
       
-      {/* Top Header */}
-      <header className="bg-slate-900 text-white shadow-md py-4 px-6 flex justify-between items-center shrink-0">
-        <div className="flex items-center space-x-3">
-          <div className="bg-purple-500 text-white p-2 rounded-lg font-bold shadow-md">
-            <ShoppingCart className="w-6 h-6" />
-          </div>
+      {/* Top Header - Pantone #032B4E with unencapsulated logo, title & subtitle (Visible only on Desktop lg:) */}
+      <header className="hidden lg:flex bg-[#032B4E] text-white shadow-md py-3.5 px-4 md:px-6 justify-between items-center shrink-0 border-b border-[#043b6b]">
+        <div className="flex items-center space-x-3.5">
+          <img 
+            src={MIAULOO_LOGO} 
+            alt="Miauloo" 
+            className="h-10 md:h-11 w-auto object-contain shrink-0" 
+            referrerPolicy="no-referrer"
+          />
           <div>
-            <h1 className="text-xl font-semibold tracking-tight">Atención a Clientes y Caja Rápida</h1>
-            <p className="text-xs text-slate-400">Vendedor activo: <span className="text-purple-400 font-medium">{currentUser.name}</span></p>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] md:text-xs font-extrabold tracking-wider text-sky-300 uppercase">
+                Miauloo • Soluciones integrales de abasto
+              </span>
+            </div>
+            <h1 className="text-lg md:text-xl font-bold tracking-tight text-white leading-tight">
+              Atención a Clientes y Caja Rápida
+            </h1>
+            <p className="text-xs text-sky-200/80">
+              Vendedor activo: <span className="text-purple-300 font-semibold">{currentUser.name}</span>
+            </p>
           </div>
         </div>
         <button 
           onClick={onBack}
-          className="bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-4 py-2 rounded-lg text-sm transition-all shadow-sm border border-slate-700"
+          className="bg-white/10 hover:bg-white/20 text-white px-3.5 py-2 rounded-xl text-xs md:text-sm font-semibold transition-all shadow-xs border border-white/20 cursor-pointer"
           id="btn_sales_logout"
         >
           Cerrar Sesión Ventas
@@ -1892,11 +1906,12 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
 
               <div className="grid grid-cols-12 border border-[#0B2545] text-[11px]">
                 <div className="col-span-4 p-3 border-r border-[#0B2545] flex flex-col items-center justify-center text-center bg-slate-50/50">
-                  <div className="w-16 h-16 rounded-full border-2 border-[#0B2545] flex items-center justify-center bg-white shadow-sm mb-2 p-1">
-                    <div className="w-full h-full rounded-full bg-[#0B2545] text-white flex items-center justify-center font-black text-xs text-center p-1 leading-none">
-                      MIAULOO
-                    </div>
-                  </div>
+                  <img 
+                    src={MIAULOO_LOGO} 
+                    alt="Miauloo" 
+                    className="h-12 w-auto object-contain mb-1.5" 
+                    referrerPolicy="no-referrer"
+                  />
                   <span className="font-bold text-[9px] uppercase leading-tight text-[#0B2545]">
                     SOLUCIONES INTEGRALES DE ABASTO, LIMPIEZA Y RECOLECCION
                   </span>
@@ -2059,13 +2074,21 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
 
             <div id="printable-sale-note" className="p-6 sm:p-8 text-slate-900 bg-[#FFFDF9] font-sans text-xs space-y-4 relative overflow-y-auto flex-1">
               <div className="flex justify-between items-start border-b-2 border-[#1E3A8A] pb-3">
-                <div>
-                  <h1 className="text-2xl font-black tracking-wider text-[#1E3A8A] font-serif uppercase">
-                    MIAULOO
-                  </h1>
-                  <p className="text-[8px] italic font-semibold text-cyan-900 max-w-xs leading-snug">
-                    &quot;PURIFICAME CON HISOPO, Y SERÉ LIMPIO; LÁVAME, Y SERÉ MÁS BLANCO QUE LA NIEVE&quot;
-                  </p>
+                <div className="flex items-center gap-3">
+                  <img 
+                    src={MIAULOO_LOGO} 
+                    alt="Miauloo" 
+                    className="h-12 w-auto object-contain shrink-0" 
+                    referrerPolicy="no-referrer"
+                  />
+                  <div>
+                    <h1 className="text-2xl font-black tracking-wider text-[#1E3A8A] font-serif uppercase">
+                      MIAULOO
+                    </h1>
+                    <p className="text-[8px] italic font-semibold text-cyan-900 max-w-xs leading-snug">
+                      &quot;PURIFICAME CON HISOPO, Y SERÉ LIMPIO; LÁVAME, Y SERÉ MÁS BLANCO QUE LA NIEVE&quot;
+                    </p>
+                  </div>
                 </div>
 
                 <div className="text-right">

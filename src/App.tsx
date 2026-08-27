@@ -189,7 +189,10 @@ export default function App() {
     }
   };
 
-  // HOME SCREEN (No descriptions, logo, title and the 5 role buttons)
+  // MIAULOO BRAND CONSTANTS
+  const MIAULOO_LOGO = 'https://mwtzisudncwrlsizmgap.supabase.co/storage/v1/object/public/logo/miauloo.png';
+
+  // HOME SCREEN (No descriptions, unencapsulated logo, title and the 5 role buttons)
   if (!activeRole) {
     return (
       <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex flex-col justify-between p-6 md:p-12 font-sans relative" id="homepage_root">
@@ -198,7 +201,7 @@ export default function App() {
         <div className="absolute bottom-0 left-0 w-80 h-80 bg-indigo-50/50 rounded-full blur-[100px] pointer-events-none" />
 
         {/* Corporate Header */}
-        <header className="max-w-4xl mx-auto w-full text-center py-10 shrink-0 relative z-10 flex flex-col items-center">
+        <header className="max-w-4xl mx-auto w-full text-center py-8 shrink-0 relative z-10 flex flex-col items-center">
           {/* Botón Inteligente Supabase con Semáforo en Vivo & Latencia en ms */}
           <div className="mb-4">
             <SupabaseSmartButton 
@@ -207,15 +210,21 @@ export default function App() {
             />
           </div>
 
-          {/* Elegant Minimal Logo */}
-          <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center text-white font-extrabold text-2xl tracking-tighter shadow-lg mb-6 border border-slate-800">
-            MP
+          {/* Unencapsulated Miauloo Logo */}
+          <div className="flex justify-center items-center mb-3">
+            <img 
+              src={MIAULOO_LOGO} 
+              alt="Miauloo" 
+              className="h-20 sm:h-24 md:h-28 w-auto object-contain max-w-[320px] transition-transform hover:scale-105 duration-300"
+              referrerPolicy="no-referrer"
+            />
           </div>
-          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-slate-900 font-display">
-            Materias primas
+
+          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-[#032B4E] font-display">
+            Miauloo
           </h1>
-          <p className="text-sm font-medium text-slate-500 mt-3 tracking-wide">
-            Panel de Control de Negocio
+          <p className="text-base md:text-lg font-semibold text-slate-600 mt-2 tracking-wide">
+            Soluciones integrales de abasto
           </p>
         </header>
 
@@ -248,7 +257,7 @@ export default function App() {
 
         {/* Footer controls */}
         <footer className="max-w-5xl mx-auto w-full text-center py-6 text-xs text-slate-400 border-t border-slate-200/60 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0 relative z-10">
-          <p>© 2026 Materias primas. Todos los derechos reservados.</p>
+          <p>© 2026 Miauloo. Soluciones integrales de abasto. Todos los derechos reservados.</p>
           <div className="flex items-center gap-2">
             <button 
               onClick={() => openSupabaseWithTab('history')}
@@ -266,7 +275,10 @@ export default function App() {
         </footer>
 
         {/* Save Telemetry Toast */}
-        <SaveTelemetryToast onOpenConfirmationsHistory={() => openSupabaseWithTab('history')} />
+        <SaveTelemetryToast 
+          onOpenConfirmationsHistory={() => openSupabaseWithTab('history')} 
+          onOpenSqlTab={() => openSupabaseWithTab('sql')}
+        />
 
         {/* Supabase Management Modal */}
         <SupabaseModal 
@@ -282,29 +294,40 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex flex-col lg:flex-row font-sans" id="app_main_layout">
       
-      {/* 1. MOBILE/TABLET HEADER (lg:hidden) */}
-      <header className="lg:hidden h-14 bg-white border-b border-slate-200 flex items-center justify-between px-4 sticky top-0 z-40 shrink-0">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center text-white font-extrabold text-sm">
-            MP
+      {/* 1. MOBILE/TABLET HEADER (lg:hidden) - Pantone #032B4E with unencapsulated logo, title & subtitle */}
+      <header className="lg:hidden bg-[#032B4E] text-white border-b border-[#043b6b] flex items-center justify-between px-3 py-2 sticky top-0 z-40 shrink-0 shadow-md">
+        <div className="flex items-center gap-2.5 min-w-0 pr-2">
+          <img 
+            src={MIAULOO_LOGO} 
+            alt="Miauloo" 
+            className="h-9 sm:h-10 w-auto object-contain shrink-0" 
+            referrerPolicy="no-referrer"
+          />
+          <div className="min-w-0">
+            <span className="font-extrabold text-sm sm:text-base tracking-tight text-white font-display leading-tight block">
+              Miauloo
+            </span>
+            <span className="text-[9px] sm:text-[10px] text-sky-200 font-medium leading-none block truncate max-w-[150px] sm:max-w-[220px]">
+              Soluciones integrales de abasto
+            </span>
           </div>
-          <span className="font-extrabold text-sm tracking-tight text-slate-900 uppercase font-display">
-            Materias primas
-          </span>
         </div>
         
-        {/* Supabase & Quick Back to Home */}
-        <div className="flex items-center gap-2">
+        {/* Supabase & Cerrar Sesión Button (Mobile & Tablet) */}
+        <div className="flex items-center gap-2 shrink-0">
           <SupabaseSmartButton 
             onClick={() => openSupabaseWithTab('status')}
             variant="compact"
           />
           <button 
             onClick={handleLogout}
-            className="p-1.5 text-slate-400 hover:text-slate-900 transition-colors"
-            title="Ir al Inicio"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold transition-all shadow-xs border border-rose-500/50 cursor-pointer"
+            title="Cerrar Sesión"
+            id="btn_mobile_tablet_logout"
           >
-            <Home className="w-5 h-5" />
+            <LogOut className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Cerrar Sesión</span>
+            <span className="sm:hidden">Salir</span>
           </button>
         </div>
       </header>
@@ -314,18 +337,21 @@ export default function App() {
         
         {/* Top brand & navigation list */}
         <div className="flex flex-col">
-          {/* Brand header */}
-          <div className="h-16 px-6 border-b border-slate-100 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 bg-slate-900 rounded-xl flex items-center justify-center text-white font-extrabold text-base shadow-sm">
-                MP
-              </div>
-              <div>
-                <h2 className="font-extrabold text-slate-900 text-sm tracking-tight font-display uppercase leading-tight">
-                  Materias primas
-                </h2>
-                <p className="text-[10px] text-slate-400 font-medium">Control Integrado</p>
-              </div>
+          {/* Brand header with Pantone #032B4E */}
+          <div className="bg-[#032B4E] text-white p-4 border-b border-[#043b6b] flex items-center gap-3">
+            <img 
+              src={MIAULOO_LOGO} 
+              alt="Miauloo" 
+              className="h-10 w-auto object-contain shrink-0"
+              referrerPolicy="no-referrer"
+            />
+            <div className="min-w-0">
+              <h2 className="font-extrabold text-white text-base tracking-tight font-display leading-tight">
+                Miauloo
+              </h2>
+              <p className="text-[10px] text-sky-200 font-medium leading-tight truncate">
+                Soluciones integrales de abasto
+              </p>
             </div>
           </div>
 
@@ -345,13 +371,13 @@ export default function App() {
                   onClick={() => setActiveRoleTab(tab.id)}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold uppercase tracking-wider transition-all cursor-pointer ${
                     isActive 
-                      ? 'bg-slate-900 text-white shadow-xs' 
+                      ? 'bg-[#032B4E] text-white shadow-xs' 
                       : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                   }`}
                   id={`tab_nav_sidebar_${tab.id}`}
                 >
                   <div className={`p-1.5 rounded-lg shrink-0 ${
-                    isActive ? 'bg-slate-800 text-white' : (activeRoleColor?.bgLight || 'bg-slate-50') + ' ' + (activeRoleColor?.inactiveColor.split(' ')[0] || 'text-slate-500')
+                    isActive ? 'bg-sky-950 text-white' : (activeRoleColor?.bgLight || 'bg-slate-50') + ' ' + (activeRoleColor?.inactiveColor.split(' ')[0] || 'text-slate-500')
                   }`}>
                     <IconComponent className="w-4 h-4" />
                   </div>
@@ -397,7 +423,10 @@ export default function App() {
       </main>
 
       {/* Save Telemetry Toast */}
-      <SaveTelemetryToast onOpenConfirmationsHistory={() => openSupabaseWithTab('history')} />
+      <SaveTelemetryToast 
+        onOpenConfirmationsHistory={() => openSupabaseWithTab('history')} 
+        onOpenSqlTab={() => openSupabaseWithTab('sql')}
+      />
 
       {/* Supabase Management Modal */}
       <SupabaseModal 
