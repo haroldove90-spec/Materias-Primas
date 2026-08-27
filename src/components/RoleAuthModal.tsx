@@ -7,7 +7,7 @@ import {
 import { RoleType, User } from '../types';
 import { MockDatabase, INITIAL_USERS } from '../data';
 import { supabase } from '../lib/supabase';
-import { fetchUsersFromSupabase } from '../services/supabaseService';
+import { fetchUsersFromSupabase, saveUserToSupabase } from '../services/supabaseService';
 import { recordSaveTelemetry } from '../services/supabaseTelemetry';
 
 interface RoleAuthModalProps {
@@ -214,36 +214,16 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
         const updatedLocal = [...localUsers, newUser];
         MockDatabase.saveUsers(updatedLocal);
 
-        // 2. Insert into Supabase with multi-tier resilient fallback
+        // 2. Insert into Supabase Cloud directly
+        let cloudSaveSuccess = false;
         try {
-          // Tier 1: Full schema (with email, active, permissions)
-          const { error: fullSchemaErr } = await supabase.from('users').upsert({
-            id: newUser.id,
-            name: newUser.name,
-            username: newUser.username,
-            email: newUser.email,
-            role: newUser.role,
-            pin: newUser.pin,
-            active: newUser.active,
-            permissions: newUser.permissions
-          });
-
-          if (fullSchemaErr) {
-            console.warn('Supabase full schema insert failed, trying core 5-column schema fallback:', fullSchemaErr.message);
-            // Tier 2: Fallback to core columns (id, name, username, role, pin)
-            const { error: coreErr } = await supabase.from('users').upsert({
-              id: newUser.id,
-              name: newUser.name,
-              username: newUser.username,
-              role: newUser.role,
-              pin: newUser.pin
-            });
-            if (coreErr) {
-              console.warn('Supabase core insert error (verificar RLS):', coreErr.message);
-            }
+          const sbRes = await saveUserToSupabase(newUser);
+          cloudSaveSuccess = sbRes.success;
+          if (!sbRes.success) {
+            console.warn('Supabase Cloud user save issue:', sbRes.error);
           }
         } catch (sbErr: any) {
-          console.warn('Error syncing user to Supabase (persistido localmente):', sbErr?.message || sbErr);
+          console.warn('Error syncing user to Supabase:', sbErr?.message || sbErr);
         }
 
         // 3. Log event and record telemetry

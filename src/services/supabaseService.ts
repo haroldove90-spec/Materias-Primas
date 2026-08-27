@@ -811,3 +811,54 @@ export async function updateUserRoleInSupabase(userId: string, newRole: 'admin' 
   }
 }
 
+// Safely upsert a user into Supabase with schema fallback
+export async function saveUserToSupabase(user: {
+  id: string;
+  name: string;
+  username: string;
+  email?: string;
+  role: string;
+  pin: string;
+  active?: boolean;
+  permissions?: string[];
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    // 1. Try full schema
+    const { error: fullErr } = await supabase.from('users').upsert({
+      id: user.id,
+      name: user.name,
+      username: user.username,
+      email: user.email || `${user.username}@miauloo.com`,
+      role: user.role,
+      pin: user.pin,
+      active: user.active ?? true,
+      permissions: user.permissions || []
+    });
+
+    if (!fullErr) {
+      return { success: true };
+    }
+
+    console.warn('Full schema user insert warning, attempting 5-column fallback:', fullErr.message);
+
+    // 2. Fallback to core columns (id, name, username, role, pin)
+    const { error: coreErr } = await supabase.from('users').upsert({
+      id: user.id,
+      name: user.name,
+      username: user.username,
+      role: user.role,
+      pin: user.pin
+    });
+
+    if (coreErr) {
+      console.error('Supabase core column user upsert failed:', coreErr.message);
+      return { success: false, error: coreErr.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Error al guardar usuario en Supabase' };
+  }
+}
+
+
