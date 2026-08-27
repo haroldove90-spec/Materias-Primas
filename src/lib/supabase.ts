@@ -4,14 +4,38 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 export const DEFAULT_SUPABASE_URL = 'https://mwtzisudncwrlsizmgap.supabase.co';
 export const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13dHppc3VkbmN3cmxzaXptZ2FwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc3NzQ1MjIsImV4cCI6MjEwMzM1MDUyMn0._q6YELlN-lPCzr2RnXs3tqEZh3JAu4iS6Ea9zaBp1f0';
 
-// Sanitize URL helper
+// Sanitize URL helper: ensures strict https://<ref>.supabase.co format without trailing slashes, dashboard paths, or rest endpoints
 function sanitizeUrl(url?: string): string {
   if (!url || typeof url !== 'string') return DEFAULT_SUPABASE_URL;
-  const clean = url.trim().replace(/['"]/g, '').replace(/\/+$/, '');
-  if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
-    return `https://${clean}`;
+  let clean = url.trim().replace(/['"]/g, '').replace(/\/+$/, '');
+  
+  // If user passed a Supabase dashboard URL: https://supabase.com/dashboard/project/mwtzisudncwrlsizmgap/...
+  const dashboardMatch = clean.match(/supabase\.com\/dashboard\/project\/([a-z0-9_-]+)/i);
+  if (dashboardMatch && dashboardMatch[1]) {
+    return `https://${dashboardMatch[1]}.supabase.co`;
   }
-  return clean;
+
+  // If user passed a subpath or REST endpoint: https://mwtzisudncwrlsizmgap.supabase.co/rest/v1/...
+  const subdomainMatch = clean.match(/https?:\/\/([a-z0-9_-]+)\.supabase\.co/i);
+  if (subdomainMatch && subdomainMatch[1]) {
+    return `https://${subdomainMatch[1]}.supabase.co`;
+  }
+
+  // If user passed just the project ref
+  if (/^[a-z0-9]{15,30}$/i.test(clean)) {
+    return `https://${clean}.supabase.co`;
+  }
+
+  if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
+    clean = `https://${clean}`;
+  }
+
+  try {
+    const parsed = new URL(clean);
+    return `${parsed.protocol}//${parsed.host}`;
+  } catch (e) {
+    return DEFAULT_SUPABASE_URL;
+  }
 }
 
 // Validate Key helper (rejects truncated keys with '...' or invalid lengths)
@@ -33,6 +57,15 @@ export function getActiveSupabaseCredentials(): { url: string; anonKey: string }
     if (typeof window !== 'undefined' && window.localStorage) {
       customUrl = localStorage.getItem('erp_supabase_custom_url') || '';
       customKey = localStorage.getItem('erp_supabase_custom_key') || '';
+      
+      // Clean and sanitize any malformed URL stored in localStorage
+      if (customUrl) {
+        const sanitized = sanitizeUrl(customUrl);
+        if (sanitized !== customUrl) {
+          localStorage.setItem('erp_supabase_custom_url', sanitized);
+          customUrl = sanitized;
+        }
+      }
     }
   } catch (e) {
     // ignore
