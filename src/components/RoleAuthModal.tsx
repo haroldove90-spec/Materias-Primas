@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { 
   Shield, Beaker, Package, ShoppingCart, Truck, Lock, User as UserIcon, 
   UserPlus, LogIn, ArrowLeft, CheckCircle2, AlertCircle, KeyRound, Mail,
-  Eye, EyeOff, Sparkles
+  Eye, EyeOff, Sparkles, Cloud, RefreshCw
 } from 'lucide-react';
 import { RoleType, User } from '../types';
 import { MockDatabase, INITIAL_USERS } from '../data';
 import { supabase } from '../lib/supabase';
+import { fetchUsersFromSupabase } from '../services/supabaseService';
 import { recordSaveTelemetry } from '../services/supabaseTelemetry';
 
 interface RoleAuthModalProps {
@@ -26,16 +27,50 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [cloudSynced, setCloudSynced] = useState(false);
 
   // Predefined default user for this specific role for quick 1-click test
   const defaultUserForRole = INITIAL_USERS.find(u => u.role === role);
 
+  // Synchronize users with Supabase Cloud on mount
   useEffect(() => {
-    // Ensure local database has initial users if empty
-    const currentUsers = MockDatabase.getUsers();
-    if (!currentUsers || currentUsers.length === 0) {
-      MockDatabase.saveUsers(INITIAL_USERS);
+    let isMounted = true;
+    async function syncUsersFromCloud() {
+      try {
+        const localUsers = MockDatabase.getUsers() || INITIAL_USERS;
+        const res = await fetchUsersFromSupabase();
+        if (res.success && res.data && res.data.length > 0 && isMounted) {
+          // Merge local and remote users by ID and username
+          const mergedMap = new Map<string, User>();
+          localUsers.forEach(u => mergedMap.set(u.username.toLowerCase(), u));
+          res.data.forEach((ru: any) => {
+            const key = ru.username?.toLowerCase() || ru.name?.toLowerCase();
+            if (key) {
+              const existing = mergedMap.get(key);
+              mergedMap.set(key, {
+                id: ru.id || existing?.id || `u-${Date.now()}`,
+                name: ru.name || existing?.name || 'Usuario',
+                username: ru.username || existing?.username || key,
+                email: ru.email || existing?.email || (key.includes('@') ? key : `${key}@miauloo.com`),
+                role: (ru.role as RoleType) || existing?.role || 'sales',
+                pin: String(ru.pin || existing?.pin || '1234'),
+                active: ru.active !== undefined ? Boolean(ru.active) : (existing?.active ?? true),
+                permissions: Array.isArray(ru.permissions) && ru.permissions.length > 0 ? ru.permissions : (existing?.permissions || ['dashboard'])
+              });
+            }
+          });
+          const mergedList = Array.from(mergedMap.values());
+          MockDatabase.saveUsers(mergedList);
+          setCloudSynced(true);
+        } else if (localUsers.length === 0) {
+          MockDatabase.saveUsers(INITIAL_USERS);
+        }
+      } catch (err) {
+        console.warn('Error fetching Supabase users in modal:', err);
+      }
     }
+    syncUsersFromCloud();
+    return () => { isMounted = false; };
   }, []);
 
   if (!isOpen) return null;
@@ -138,14 +173,19 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
           return;
         }
 
-        // Verify if username or email already exists locally
+        // Determine user login identifiers
+        const finalEmail = cleanEmail || (cleanInput.includes('@') ? cleanInput : `${cleanInput}@miauloo.com`);
+        const finalUsername = cleanInput;
+
+        // Verify if username or email already exists locally or in Supabase
         const existsLocal = localUsers.find(
-          u => u.username.toLowerCase() === cleanInput || 
-               (cleanEmail && u.email && u.email.toLowerCase() === cleanEmail)
+          u => u.username.toLowerCase() === finalUsername.toLowerCase() || 
+               (finalEmail && u.email && u.email.toLowerCase() === finalEmail) ||
+               (u.username.toLowerCase() === finalEmail)
         );
 
         if (existsLocal) {
-          setError(`El usuario "@${cleanInput}" o correo ya se encuentra registrado. Inicia sesión o elige otro nombre de usuario.`);
+          setError(`El usuario "${finalUsername}" o correo "${finalEmail}" ya se encuentra registrado. Inicia sesión en la pestaña superior.`);
           setLoading(false);
           return;
         }
@@ -162,21 +202,21 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
         const newUser: User = {
           id: `u-${Date.now()}`,
           name: name.trim(),
-          username: cleanInput,
-          email: cleanEmail || `${cleanInput}@miauloo.com`,
+          username: finalUsername,
+          email: finalEmail,
           role: role, // Automatically assign the active modal role
           pin: cleanPin,
           active: true,
           permissions: defaultPerms[role]
         };
 
-        // 1. Save to local storage database
+        // 1. Save immediately to local storage database
         const updatedLocal = [...localUsers, newUser];
         MockDatabase.saveUsers(updatedLocal);
 
-        // 2. Insert into Supabase with multi-tier fallback
+        // 2. Insert into Supabase with multi-tier resilient fallback
         try {
-          // Tier 1: Try full schema (id, name, username, email, role, pin, active, permissions)
+          // Tier 1: Full schema (with email, active, permissions)
           const { error: fullSchemaErr } = await supabase.from('users').upsert({
             id: newUser.id,
             name: newUser.name,
@@ -189,7 +229,7 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
           });
 
           if (fullSchemaErr) {
-            console.warn('Supabase full schema insert failed, trying core columns fallback:', fullSchemaErr.message);
+            console.warn('Supabase full schema insert failed, trying core 5-column schema fallback:', fullSchemaErr.message);
             // Tier 2: Fallback to core columns (id, name, username, role, pin)
             const { error: coreErr } = await supabase.from('users').upsert({
               id: newUser.id,
@@ -199,11 +239,11 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
               pin: newUser.pin
             });
             if (coreErr) {
-              console.error('Supabase core insert error (check RLS / columns in Supabase):', coreErr.message);
+              console.warn('Supabase core insert error (verificar RLS):', coreErr.message);
             }
           }
         } catch (sbErr: any) {
-          console.warn('Error syncing user to Supabase (guardado localmente):', sbErr?.message || sbErr);
+          console.warn('Error syncing user to Supabase (persistido localmente):', sbErr?.message || sbErr);
         }
 
         // 3. Log event and record telemetry
@@ -211,7 +251,7 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
           newUser.name,
           'Registro de Operador',
           'Seguridad',
-          `Alta de nuevo usuario (@${newUser.username} / ${newUser.email}) con rol asignado automático: ${newUser.role.toUpperCase()}`
+          `Alta de nuevo usuario (@${newUser.username} / ${newUser.email}) con rol asignado: ${newUser.role.toUpperCase()}`
         );
 
         recordSaveTelemetry({
@@ -221,11 +261,11 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
           countBefore: localUsers.length,
           countAfter: localUsers.length + 1,
           status: 'success',
-          payloadSummary: `Usuario @${newUser.username} creado con rol ${newUser.role}`,
+          payloadSummary: `Usuario @${newUser.username} (${newUser.email}) creado con rol ${newUser.role}`,
           source: 'cloud_sync'
         });
 
-        setSuccessMsg(`¡Registro completado con éxito! Se te ha asignado el rol de ${currentMeta.title}. Accediendo...`);
+        setSuccessMsg(`¡Registro completado con éxito! Bienvenido(a) ${newUser.name}. Accediendo...`);
         setTimeout(() => {
           onSuccess(newUser);
         }, 800);
@@ -235,52 +275,76 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
         // MODO INICIO DE SESIÓN
         // ============================================
 
-        // Flexible lookup: Find by username, email, or common alias (e.g., 'carlos' -> 'carlos_alm', 'diana' -> 'diana_prod', 'mariana' -> 'mariana_vta', 'pedro' -> 'pedro_rep')
+        // First, fetch and merge latest users directly from Supabase Cloud safely
+        try {
+          const { data: cloudUsers, error: fetchErr } = await supabase
+            .from('users')
+            .select('*');
+
+          if (!fetchErr && cloudUsers && cloudUsers.length > 0) {
+            const mergedMap = new Map<string, User>();
+            localUsers.forEach(u => mergedMap.set(u.username.toLowerCase(), u));
+            cloudUsers.forEach((cu: any) => {
+              const uName = (cu.username || cu.name || '').toLowerCase().trim();
+              if (uName) {
+                const existing = mergedMap.get(uName);
+                mergedMap.set(uName, {
+                  id: String(cu.id || existing?.id || `u-${Date.now()}`),
+                  name: cu.name || existing?.name || 'Usuario',
+                  username: cu.username || existing?.username || uName,
+                  email: cu.email || existing?.email || (uName.includes('@') ? uName : `${uName}@miauloo.com`),
+                  role: (cu.role as RoleType) || existing?.role || 'sales',
+                  pin: String(cu.pin || existing?.pin || '1234'),
+                  active: cu.active !== undefined ? Boolean(cu.active) : (existing?.active ?? true),
+                  permissions: Array.isArray(cu.permissions) && cu.permissions.length > 0 ? cu.permissions : (existing?.permissions || ['dashboard'])
+                });
+              }
+            });
+            localUsers = Array.from(mergedMap.values());
+            MockDatabase.saveUsers(localUsers);
+          }
+        } catch (sbFetchErr) {
+          console.warn('Supabase fetch during login skip:', sbFetchErr);
+        }
+
+        // Comprehensive & Flexible lookup:
+        // 1. Exact username match
+        // 2. Exact email match
+        // 3. Username contains or starts with (e.g. haroldo vs haroldo90@hotmail.com)
+        // 4. Email prefix match (e.g. haroldo90@hotmail.com -> haroldo90)
+        // 5. System aliases (e.g. carlos -> carlos_alm)
+        // 6. Full name match
+        const cleanPrefix = cleanInput.includes('@') ? cleanInput.split('@')[0] : cleanInput;
+
         let matchedUser = localUsers.find(u => {
-          const uName = u.username.toLowerCase();
-          const uEmail = u.email?.toLowerCase() || '';
-          const fullName = u.name.toLowerCase();
+          const uName = (u.username || '').toLowerCase();
+          const uEmail = (u.email || '').toLowerCase();
+          const uFullName = (u.name || '').toLowerCase();
+          const uPrefix = uEmail.includes('@') ? uEmail.split('@')[0] : uName;
+
           return (
             uName === cleanInput ||
             uEmail === cleanInput ||
+            uName === cleanPrefix ||
+            uPrefix === cleanPrefix ||
+            (cleanInput.includes('@') && uName.startsWith(cleanPrefix)) ||
+            (uEmail.includes('@') && uEmail.startsWith(cleanPrefix)) ||
             uName.replace(/_(prod|alm|vta|rep)$/, '') === cleanInput ||
-            fullName.includes(cleanInput)
+            uFullName === cleanInput ||
+            uFullName.includes(cleanInput) ||
+            cleanInput.includes(uFullName)
           );
         });
 
-        // Also attempt to query Supabase directly for updated roles or users created remotely
-        try {
-          const { data, error: sbErr } = await supabase
-            .from('users')
-            .select('*')
-            .or(`username.ilike.${cleanInput},email.ilike.${cleanInput},username.ilike.${cleanInput}_%`)
-            .maybeSingle();
-
-          if (!sbErr && data) {
-            matchedUser = {
-              id: data.id,
-              name: data.name,
-              username: data.username,
-              email: data.email || `${data.username}@miauloo.com`,
-              role: data.role as RoleType,
-              pin: data.pin,
-              active: data.active ?? true,
-              permissions: Array.isArray(data.permissions) ? data.permissions : []
-            };
-          }
-        } catch (err) {
-          console.log('Supabase sync skip during auth:', err);
-        }
-
         if (!matchedUser) {
-          setError(`No se encontró el usuario o correo "${cleanInput}". Si aún no tienes cuenta en este departamento, haz clic en la pestaña "Registrarse".`);
+          setError(`No se encontró el usuario o correo "${cleanInput}". Si aún no te has registrado, haz clic en la pestaña "Registrarse" arriba para crear tu cuenta.`);
           setLoading(false);
           return;
         }
 
-        // Validate PIN / Password
-        if (matchedUser.pin !== cleanPin) {
-          setError('PIN o contraseña incorrecta. Verifica tu clave de acceso.');
+        // Validate PIN / Password (trimmed comparison)
+        if (String(matchedUser.pin).trim() !== cleanPin) {
+          setError(`PIN o contraseña incorrecta para "${matchedUser.name}". Verifica tu clave de acceso.`);
           setLoading(false);
           return;
         }
@@ -300,7 +364,7 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
           return;
         }
 
-        // Synchronize in local state in case role was modified in Supabase
+        // Synchronize in local state
         const uIndex = localUsers.findIndex(u => u.id === matchedUser!.id || u.username.toLowerCase() === matchedUser!.username.toLowerCase());
         if (uIndex >= 0) {
           localUsers[uIndex] = matchedUser;

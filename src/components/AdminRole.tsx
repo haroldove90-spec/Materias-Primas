@@ -8,7 +8,7 @@ import { RawMaterial, Client, Sale, AuditLog, User, SystemConfig, RoleType } fro
 import { exportToExcel, exportToPDF } from '../utils/exportUtils';
 import { SupabaseModal } from './SupabaseModal';
 import { SUPABASE_PROJECT_INFO, SUPABASE_URL, supabase } from '../lib/supabase';
-import { updateUserRoleInSupabase } from '../services/supabaseService';
+import { updateUserRoleInSupabase, fetchUsersFromSupabase } from '../services/supabaseService';
 import { recordSaveTelemetry } from '../services/supabaseTelemetry';
 
 interface AdminRoleProps {
@@ -48,14 +48,88 @@ export default function AdminRole({ onBack, currentUser, activeTab: propsActiveT
   const [creditDays, setCreditDays] = useState(30);
   const [creditLimit, setCreditLimit] = useState(50000);
 
+  const [isSyncingUsers, setIsSyncingUsers] = useState(false);
+  const [userSyncMsg, setUserSyncMsg] = useState<string | null>(null);
+
   // Load database on mount and whenever updates happen
-  const loadDatabase = () => {
+  const loadDatabase = async () => {
     setMaterials(MockDatabase.getRawMaterials());
     setClients(MockDatabase.getClients());
     setSales(MockDatabase.getSales());
     setAuditLogs(MockDatabase.getAuditLogs());
     setUsers(MockDatabase.getUsers());
     setConfig(MockDatabase.getSystemConfig());
+
+    // Pull users from Supabase Cloud
+    try {
+      const res = await fetchUsersFromSupabase();
+      if (res.success && res.data && res.data.length > 0) {
+        const local = MockDatabase.getUsers();
+        const map = new Map<string, User>();
+        local.forEach(u => map.set(u.username.toLowerCase(), u));
+        res.data.forEach((ru: any) => {
+          const key = ru.username?.toLowerCase() || ru.name?.toLowerCase();
+          if (key) {
+            const existing = map.get(key);
+            map.set(key, {
+              id: ru.id || existing?.id || `u-${Date.now()}`,
+              name: ru.name || existing?.name || 'Usuario',
+              username: ru.username || existing?.username || key,
+              email: ru.email || existing?.email || `${key}@miauloo.com`,
+              role: ru.role || existing?.role || 'sales',
+              pin: String(ru.pin || existing?.pin || '1234'),
+              active: ru.active !== undefined ? Boolean(ru.active) : true,
+              permissions: ru.permissions || existing?.permissions || ['dashboard']
+            });
+          }
+        });
+        const merged = Array.from(map.values());
+        MockDatabase.saveUsers(merged);
+        setUsers(merged);
+      }
+    } catch (e) {
+      console.warn('Sync users error in AdminRole:', e);
+    }
+  };
+
+  const handleManualSyncUsers = async () => {
+    setIsSyncingUsers(true);
+    setUserSyncMsg(null);
+    try {
+      const res = await fetchUsersFromSupabase();
+      if (res.success && res.data) {
+        const local = MockDatabase.getUsers();
+        const map = new Map<string, User>();
+        local.forEach(u => map.set(u.username.toLowerCase(), u));
+        res.data.forEach((ru: any) => {
+          const key = ru.username?.toLowerCase() || ru.name?.toLowerCase();
+          if (key) {
+            const existing = map.get(key);
+            map.set(key, {
+              id: ru.id || existing?.id || `u-${Date.now()}`,
+              name: ru.name || existing?.name || 'Usuario',
+              username: ru.username || existing?.username || key,
+              email: ru.email || existing?.email || `${key}@miauloo.com`,
+              role: ru.role || existing?.role || 'sales',
+              pin: String(ru.pin || existing?.pin || '1234'),
+              active: ru.active !== undefined ? Boolean(ru.active) : true,
+              permissions: ru.permissions || existing?.permissions || ['dashboard']
+            });
+          }
+        });
+        const merged = Array.from(map.values());
+        MockDatabase.saveUsers(merged);
+        setUsers(merged);
+        setUserSyncMsg(`¡${res.data.length} usuarios sincronizados desde Supabase Cloud!`);
+      } else {
+        setUserSyncMsg(res.error || 'No se pudieron descargar los usuarios de Supabase.');
+      }
+    } catch (err: any) {
+      setUserSyncMsg('Error de conexión con Supabase.');
+    } finally {
+      setIsSyncingUsers(false);
+      setTimeout(() => setUserSyncMsg(null), 4000);
+    }
   };
 
   useEffect(() => {
@@ -900,9 +974,28 @@ export default function AdminRole({ onBack, currentUser, activeTab: propsActiveT
 
               {/* Lista de Empleados */}
               <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm lg:col-span-2">
-                <h3 className="text-base font-semibold text-slate-900 mb-4 flex items-center">
-                  <Users className="w-5 h-5 mr-2 text-slate-500" /> Catálogo y Permisos de Personal Activo
-                </h3>
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                  <h3 className="text-base font-semibold text-slate-900 flex items-center">
+                    <Users className="w-5 h-5 mr-2 text-slate-500" /> Catálogo y Permisos de Personal Activo
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    {userSyncMsg && (
+                      <span className="text-xs text-emerald-600 font-medium bg-emerald-50 px-2.5 py-1 rounded border border-emerald-200">
+                        {userSyncMsg}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleManualSyncUsers}
+                      disabled={isSyncingUsers}
+                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors flex items-center border border-slate-300 disabled:opacity-50"
+                      title="Sincronizar usuarios desde Supabase Cloud"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 mr-1.5 text-slate-600 ${isSyncingUsers ? 'animate-spin' : ''}`} />
+                      {isSyncingUsers ? 'Sincronizando...' : 'Recargar de Supabase'}
+                    </button>
+                  </div>
+                </div>
 
                 <div className="border border-slate-100 rounded-lg overflow-hidden">
                   <table className="w-full text-left border-collapse text-xs">

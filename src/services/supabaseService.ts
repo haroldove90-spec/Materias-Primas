@@ -764,16 +764,31 @@ export async function checkSupabaseConnection(): Promise<{ connected: boolean; m
   }
 }
 
-// Fetch all active users from Supabase Cloud
+// Fetch all active users from Supabase Cloud safely without assuming created_at column exists
 export async function fetchUsersFromSupabase() {
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('*')
-      .order('created_at', { ascending: true });
+      .select('*');
     
-    if (error) throw error;
-    return { success: true, data: data || [] };
+    if (error) {
+      console.warn('Supabase fetchUsers error:', error.message);
+      throw error;
+    }
+    
+    // Normalize and sanitize users
+    const normalizedUsers = (data || []).map((u: any) => ({
+      id: String(u.id || `u-${Math.random().toString(36).substr(2, 6)}`),
+      name: u.name || 'Usuario',
+      username: (u.username || u.name || 'usuario').toLowerCase().trim(),
+      email: u.email || (u.username && u.username.includes('@') ? u.username : `${u.username || 'usuario'}@miauloo.com`),
+      role: u.role || 'sales',
+      pin: String(u.pin || '1234'),
+      active: u.active !== undefined ? Boolean(u.active) : true,
+      permissions: Array.isArray(u.permissions) ? u.permissions : []
+    }));
+
+    return { success: true, data: normalizedUsers };
   } catch (error: any) {
     return { success: false, error: error?.message || 'Error al obtener usuarios de Supabase' };
   }

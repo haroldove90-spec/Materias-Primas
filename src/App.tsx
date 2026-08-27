@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Shield, Beaker, Package, ShoppingCart, Truck, RefreshCw, Home, LogOut,
   BarChart3, DollarSign, Settings, Activity, Layers, Users, FileCheck, MapPin,
   FileText, Receipt, Database, ChevronRight, Lock
 } from 'lucide-react';
-import { MockDatabase } from './data';
+import { MockDatabase, INITIAL_USERS } from './data';
 import { User, RoleType } from './types';
+import { fetchUsersFromSupabase } from './services/supabaseService';
 
 import AdminRole from './components/AdminRole';
 import ProductionRole from './components/ProductionRole';
@@ -29,6 +30,42 @@ export default function App() {
 
   // Modal for role-based authentication and registration
   const [authModalRole, setAuthModalRole] = useState<RoleType | null>(null);
+
+  // Background sync: synchronize users from Supabase Cloud on initial app load
+  useEffect(() => {
+    async function initSyncUsers() {
+      try {
+        const localUsers = MockDatabase.getUsers() || INITIAL_USERS;
+        const res = await fetchUsersFromSupabase();
+        if (res.success && res.data && res.data.length > 0) {
+          const mergedMap = new Map<string, User>();
+          localUsers.forEach(u => mergedMap.set(u.username.toLowerCase(), u));
+          res.data.forEach((ru: any) => {
+            const key = ru.username?.toLowerCase() || ru.name?.toLowerCase();
+            if (key) {
+              const existing = mergedMap.get(key);
+              mergedMap.set(key, {
+                id: ru.id || existing?.id || `u-${Date.now()}`,
+                name: ru.name || existing?.name || 'Usuario',
+                username: ru.username || existing?.username || key,
+                email: ru.email || existing?.email || (key.includes('@') ? key : `${key}@miauloo.com`),
+                role: (ru.role as RoleType) || existing?.role || 'sales',
+                pin: String(ru.pin || existing?.pin || '1234'),
+                active: ru.active !== undefined ? Boolean(ru.active) : (existing?.active ?? true),
+                permissions: Array.isArray(ru.permissions) && ru.permissions.length > 0 ? ru.permissions : (existing?.permissions || ['dashboard'])
+              });
+            }
+          });
+          MockDatabase.saveUsers(Array.from(mergedMap.values()));
+        } else if (localUsers.length === 0) {
+          MockDatabase.saveUsers(INITIAL_USERS);
+        }
+      } catch (e) {
+        console.warn('Initial cloud users sync error:', e);
+      }
+    }
+    initSyncUsers();
+  }, []);
 
   const openSupabaseWithTab = (tab: 'status' | 'sync' | 'history' | 'sql' | 'tables' = 'status') => {
     setModalInitialTab(tab);
