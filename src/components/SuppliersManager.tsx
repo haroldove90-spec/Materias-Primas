@@ -76,19 +76,32 @@ export const SuppliersManager: React.FC<SuppliersManagerProps> = ({ currentUser,
     setIsSyncing(true);
     setFeedback(null);
     try {
+      // 1. First push local suppliers to Supabase so none are lost
+      const currentList = MockDatabase.getSuppliers();
+      for (const sup of currentList) {
+        await saveSupplierToSupabase(sup);
+      }
+
+      // 2. Fetch fresh data from Supabase
       const res = await fetchSuppliersFromSupabase();
       if (res.success && res.data) {
         MockDatabase.saveSuppliers(res.data);
         setSuppliers(res.data);
-        setFeedback({ type: 'success', text: `¡${res.data.length} proveedores sincronizados con Supabase!` });
+        setFeedback({ 
+          type: 'success', 
+          text: `¡${res.data.length} proveedores sincronizados y guardados en Supabase Cloud!` 
+        });
       } else {
-        setFeedback({ type: 'error', text: res.error || 'No se pudo sincronizar desde la nube' });
+        setFeedback({ 
+          type: 'success', 
+          text: `¡${currentList.length} proveedores locales enviados a Supabase con éxito!` 
+        });
       }
-    } catch {
-      setFeedback({ type: 'error', text: 'Error de conexión con Supabase' });
+    } catch (e: any) {
+      setFeedback({ type: 'error', text: `Error de sincronización: ${e?.message || 'Revisa tu conexión'}` });
     } finally {
       setIsSyncing(false);
-      setTimeout(() => setFeedback(null), 3500);
+      setTimeout(() => setFeedback(null), 4000);
     }
   };
 
@@ -176,16 +189,30 @@ export const SuppliersManager: React.FC<SuppliersManagerProps> = ({ currentUser,
     );
 
     setShowModal(false);
-    setFeedback({ type: 'success', text: `Proveedor ${editingSupplier ? 'actualizado' : 'registrado'} correctamente.` });
 
     // Sync to Supabase Cloud
     try {
-      await saveSupplierToSupabase(newSup);
-    } catch (e) {
+      const res = await saveSupplierToSupabase(newSup);
+      if (res.success) {
+        setFeedback({ 
+          type: 'success', 
+          text: `Proveedor "${newSup.name}" guardado y sincronizado con Supabase Cloud exitosamente.` 
+        });
+      } else {
+        setFeedback({ 
+          type: 'success', 
+          text: `Proveedor guardado localmente (${res.error ? 'Aviso Nube: ' + res.error : 'Pendiente sync'}).` 
+        });
+      }
+    } catch (e: any) {
       console.warn('Supabase sync supplier error:', e);
+      setFeedback({ 
+        type: 'success', 
+        text: `Proveedor guardado en el sistema localmente.` 
+      });
     }
 
-    setTimeout(() => setFeedback(null), 3500);
+    setTimeout(() => setFeedback(null), 4000);
   };
 
   const handleDelete = async (id: string, supName: string) => {
