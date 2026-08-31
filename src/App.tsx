@@ -84,8 +84,7 @@ export default function App() {
       colorClass: 'bg-amber-500 text-white shadow-amber-100 border-amber-300',
       activeColor: 'bg-amber-500 text-white border-amber-600',
       inactiveColor: 'text-amber-700 hover:bg-amber-50',
-      bgLight: 'bg-amber-50/50',
-      operatorName: 'Jonathan'
+      bgLight: 'bg-amber-50/50'
     },
     { 
       type: 'production' as RoleType, 
@@ -95,8 +94,7 @@ export default function App() {
       colorClass: 'bg-cyan-500 text-white shadow-cyan-100 border-cyan-300',
       activeColor: 'bg-cyan-500 text-white border-cyan-600',
       inactiveColor: 'text-cyan-700 hover:bg-cyan-50',
-      bgLight: 'bg-cyan-50/50',
-      operatorName: 'Diana'
+      bgLight: 'bg-cyan-50/50'
     },
     { 
       type: 'warehouse' as RoleType, 
@@ -106,8 +104,7 @@ export default function App() {
       colorClass: 'bg-orange-500 text-white shadow-orange-100 border-orange-300',
       activeColor: 'bg-orange-500 text-white border-orange-600',
       inactiveColor: 'text-orange-700 hover:bg-orange-50',
-      bgLight: 'bg-orange-50/50',
-      operatorName: 'Carlos'
+      bgLight: 'bg-orange-50/50'
     },
     { 
       type: 'sales' as RoleType, 
@@ -117,8 +114,7 @@ export default function App() {
       colorClass: 'bg-purple-500 text-white shadow-purple-100 border-purple-300',
       activeColor: 'bg-purple-500 text-white border-purple-600',
       inactiveColor: 'text-purple-700 hover:bg-purple-50',
-      bgLight: 'bg-purple-50/50',
-      operatorName: 'Mariana'
+      bgLight: 'bg-purple-50/50'
     },
     { 
       type: 'delivery' as RoleType, 
@@ -128,8 +124,7 @@ export default function App() {
       colorClass: 'bg-blue-500 text-white shadow-blue-100 border-blue-300',
       activeColor: 'bg-blue-500 text-white border-blue-600',
       inactiveColor: 'text-blue-700 hover:bg-blue-50',
-      bgLight: 'bg-blue-50/50',
-      operatorName: 'Pedro'
+      bgLight: 'bg-blue-50/50'
     }
   ];
 

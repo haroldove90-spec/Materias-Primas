@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Shield, Beaker, Package, ShoppingCart, Truck, Lock, User as UserIcon, 
+  Shield, Beaker, Package, ShoppingCart, Truck, User as UserIcon, 
   LogIn, ArrowLeft, CheckCircle2, AlertCircle, KeyRound,
-  Eye, EyeOff, Sparkles, Cloud, RefreshCw
+  Eye, EyeOff
 } from 'lucide-react';
 import { RoleType, User } from '../types';
 import { MockDatabase, INITIAL_USERS } from '../data';
@@ -24,10 +24,6 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [cloudSynced, setCloudSynced] = useState(false);
-
-  // Predefined default user for this specific role for quick 1-click test
-  const defaultUserForRole = INITIAL_USERS.find(u => u.role === role);
 
   // Synchronize users with Supabase Cloud on mount
   useEffect(() => {
@@ -37,7 +33,6 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
         const localUsers = MockDatabase.getUsers() || INITIAL_USERS;
         const res = await fetchUsersFromSupabase();
         if (res.success && res.data && res.data.length > 0 && isMounted) {
-          // Merge local and remote users by ID and username
           const mergedMap = new Map<string, User>();
           localUsers.forEach(u => mergedMap.set(u.username.toLowerCase(), u));
           res.data.forEach((ru: any) => {
@@ -58,7 +53,6 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
           });
           const mergedList = Array.from(mergedMap.values());
           MockDatabase.saveUsers(mergedList);
-          setCloudSynced(true);
         } else if (localUsers.length === 0) {
           MockDatabase.saveUsers(INITIAL_USERS);
         }
@@ -72,63 +66,46 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
 
   if (!isOpen) return null;
 
-  const roleMeta: Record<RoleType, { title: string; subtitle: string; icon: React.ComponentType<any>; color: string; badge: string; defaultUserHint: string; defaultPin: string }> = {
+  const roleMeta: Record<RoleType, { title: string; subtitle: string; icon: React.ComponentType<any>; color: string; badge: string }> = {
     admin: {
       title: 'Gerencia & Administración',
-      subtitle: 'Control total de finanzas, catálogo de usuarios, configuraciones y todos los roles.',
+      subtitle: 'Acceso seguro al panel administrativo y control gerencial.',
       icon: Shield,
       color: 'from-amber-600 to-amber-700',
-      badge: 'bg-amber-100 text-amber-900 border-amber-300',
-      defaultUserHint: 'jonathan',
-      defaultPin: '1111'
+      badge: 'bg-amber-100 text-amber-900 border-amber-300'
     },
     production: {
       title: 'Producción & Fórmulas',
-      subtitle: 'Preparación de mezclas, explosión de insumos (MRP) y órdenes de trabajo.',
+      subtitle: 'Preparación de mezclas, explosión de insumos y órdenes de trabajo.',
       icon: Beaker,
       color: 'from-cyan-600 to-cyan-700',
-      badge: 'bg-cyan-100 text-cyan-900 border-cyan-300',
-      defaultUserHint: 'diana_prod',
-      defaultPin: '2222'
+      badge: 'bg-cyan-100 text-cyan-900 border-cyan-300'
     },
     warehouse: {
       title: 'Almacén & Inventarios',
-      subtitle: 'Kárdex, trazabilidad de lotes, mermas y órdenes de compra de insumos.',
+      subtitle: 'Kárdex, trazabilidad de lotes, mermas y recepción de compras.',
       icon: Package,
       color: 'from-orange-600 to-orange-700',
-      badge: 'bg-orange-100 text-orange-900 border-orange-300',
-      defaultUserHint: 'carlos_alm',
-      defaultPin: '3333'
+      badge: 'bg-orange-100 text-orange-900 border-orange-300'
     },
     sales: {
       title: 'Punto de Venta & Clientes',
-      subtitle: 'Caja rápida, remisiones, notas de venta, traslados y crédito de clientes.',
+      subtitle: 'Caja rápida, remisiones, notas de venta y cobranza.',
       icon: ShoppingCart,
       color: 'from-purple-600 to-purple-700',
-      badge: 'bg-purple-100 text-purple-900 border-purple-300',
-      defaultUserHint: 'mariana_vta',
-      defaultPin: '4444'
+      badge: 'bg-purple-100 text-purple-900 border-purple-300'
     },
     delivery: {
       title: 'Reparto & Logística',
-      subtitle: 'Rutas de distribución, evidencias de entrega y cobro en destino.',
+      subtitle: 'Rutas de distribución y evidencias de entrega.',
       icon: Truck,
       color: 'from-blue-600 to-blue-700',
-      badge: 'bg-blue-100 text-blue-900 border-blue-300',
-      defaultUserHint: 'pedro_rep',
-      defaultPin: '5555'
+      badge: 'bg-blue-100 text-blue-900 border-blue-300'
     }
   };
 
   const currentMeta = roleMeta[role];
   const IconComponent = currentMeta.icon;
-
-  const handleQuickFill = (user: string, passwordPin: string) => {
-    setUsernameOrEmail(user);
-    setPin(passwordPin);
-    setError(null);
-    setSuccessMsg(`Credenciales cargadas para @${user}`);
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -153,7 +130,7 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
         MockDatabase.saveUsers(localUsers);
       }
 
-      // First, fetch and merge latest users directly from Supabase Cloud safely
+      // Fetch and merge latest users directly from Supabase Cloud safely
       try {
         const { data: cloudUsers, error: fetchErr } = await supabase
           .from('users')
@@ -173,7 +150,7 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
                 email: cu.email || existing?.email || (uName.includes('@') ? uName : `${uName}@miauloo.com`),
                 role: (cu.role as RoleType) || existing?.role || 'sales',
                 pin: String(cu.pin || existing?.pin || '1234'),
-                active: cu.active !== undefined ? Boolean(cu.active) : (existing?.active ?? true),
+                active: cu.active !== undefined ? Boolean(ru_active(cu.active)) : (existing?.active ?? true),
                 permissions: Array.isArray(cu.permissions) && cu.permissions.length > 0 ? cu.permissions : (existing?.permissions || ['dashboard'])
               });
             }
@@ -185,7 +162,10 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
         console.warn('Supabase fetch during login skip:', sbFetchErr);
       }
 
-      // Comprehensive & Flexible lookup
+      function ru_active(val: any) {
+        return val !== false && val !== 'false';
+      }
+
       const cleanPrefix = cleanInput.includes('@') ? cleanInput.split('@')[0] : cleanInput;
 
       let matchedUser = localUsers.find(u => {
@@ -198,16 +178,12 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
           uEmail === cleanInput ||
           (cleanPrefix && uName === cleanPrefix) ||
           (cleanPrefix && uEmail.startsWith(cleanPrefix)) ||
-          uFullName === cleanInput ||
-          (cleanInput === 'carlos' && uName === 'carlos_alm') ||
-          (cleanInput === 'diana' && uName === 'diana_prod') ||
-          (cleanInput === 'mariana' && uName === 'mariana_vta') ||
-          (cleanInput === 'pedro' && uName === 'pedro_rep')
+          uFullName === cleanInput
         );
       });
 
       if (!matchedUser) {
-        setError(`No se encontró ningún usuario con el identificador "${cleanInput}". Solicita tu alta al Administrador para recibir tus credenciales por WhatsApp.`);
+        setError(`No se encontró ningún usuario con el identificador ingresado. Si eres nuevo en el equipo, solicita tu alta al Administrador para recibir tus credenciales.`);
         setLoading(false);
         return;
       }
@@ -225,8 +201,7 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
       const isPinMatch = 
         userPin === inputPin || 
         userPin.toLowerCase() === inputPin.toLowerCase() ||
-        (role === 'admin' && inputPin === '2026') ||
-        (matchedUser.role === role && (inputPin === '1111' || inputPin === '1234'));
+        (role === 'admin' && inputPin === '2026');
 
       if (!isPinMatch) {
         setError(`PIN o contraseña incorrecta para el usuario ${matchedUser.name}.`);
@@ -270,7 +245,7 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
       setSuccessMsg(`¡Bienvenido, ${matchedUser.name}! Accediendo al sistema...`);
       setTimeout(() => {
         onSuccess(matchedUser!);
-      }, 500);
+      }, 400);
 
     } catch (err: any) {
       setError(err?.message || 'Ocurrió un error inesperado al procesar las credenciales.');
@@ -280,66 +255,49 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200" id="role_auth_modal_overlay">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200" id="role_auth_modal_overlay">
       <div className="bg-white w-full max-w-md rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col my-auto max-h-[94dvh] sm:max-h-[90vh] relative" id="role_auth_modal_card">
         
         {/* Header with Pantone / Role gradient */}
-        <div className={`bg-gradient-to-r ${currentMeta.color} p-3.5 sm:p-5 text-white relative shrink-0`}>
+        <div className={`bg-gradient-to-r ${currentMeta.color} p-4 sm:p-5 text-white relative shrink-0`}>
           <button
             onClick={onClose}
-            className="absolute top-2.5 right-2.5 sm:top-3.5 sm:right-3.5 text-white/80 hover:text-white p-1.5 rounded-full hover:bg-white/10 transition-colors cursor-pointer"
+            className="absolute top-3.5 right-3.5 text-white/80 hover:text-white p-1.5 rounded-full hover:bg-white/10 transition-colors cursor-pointer"
             title="Volver"
             id="btn_close_auth_modal"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
 
-          <div className="flex items-center space-x-2.5 sm:space-x-3 mb-1 sm:mb-1.5">
-            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center text-white shadow-inner shrink-0">
+          <div className="flex items-center space-x-3 mb-1">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center text-white shadow-inner shrink-0">
               <IconComponent className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div className="min-w-0 pr-6">
-              <span className="text-[9px] sm:text-[10px] font-extrabold uppercase tracking-widest text-white/80 block truncate">
+              <span className="text-[10px] font-extrabold uppercase tracking-widest text-white/80 block truncate">
                 Acceso al Sistema • Miauloo ERP
               </span>
-              <h3 className="text-base sm:text-xl font-extrabold tracking-tight text-white leading-tight truncate">
+              <h3 className="text-lg sm:text-xl font-extrabold tracking-tight text-white leading-tight truncate">
                 {currentMeta.title}
               </h3>
             </div>
           </div>
-          <p className="text-[11px] sm:text-xs text-white/90 font-medium leading-snug mt-1 sm:mt-1.5 line-clamp-2">
+          <p className="text-xs text-white/90 font-medium leading-snug mt-1 line-clamp-2">
             {currentMeta.subtitle}
           </p>
         </div>
 
         {/* Form Body */}
-        <div className="p-4 sm:p-6 overflow-y-auto flex-1 overscroll-contain space-y-3.5">
+        <div className="p-5 sm:p-6 overflow-y-auto flex-1 overscroll-contain space-y-4">
           
-          {/* Note regarding Admin-only account creation & WhatsApp delivery */}
-          <div className="p-3 bg-blue-50/90 border border-blue-200/80 rounded-xl text-blue-950 text-xs flex items-start gap-2.5">
+          {/* Note regarding authorized access */}
+          <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl text-slate-700 text-xs flex items-start gap-2.5">
             <Shield className="w-4 h-4 text-[#032B4E] shrink-0 mt-0.5" />
             <div className="leading-snug">
               <span className="font-bold block text-[#032B4E]">Acceso de Personal Autorizado</span>
-              El Administrador genera las cuentas en el panel de Gerencia y envía las credenciales de acceso directamente vía WhatsApp.
+              Ingresa tus credenciales asignadas por la administración para continuar.
             </div>
           </div>
-
-          {/* Quick Auto-fill banner for testing */}
-          {defaultUserForRole && (
-            <div className="p-2 sm:p-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl flex items-center justify-between transition-colors">
-              <div className="text-[11px] text-slate-700 flex items-center gap-1.5 truncate pr-2">
-                <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                <span className="truncate">Operador: <strong>@{defaultUserForRole.username}</strong></span>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleQuickFill(defaultUserForRole.username, defaultUserForRole.pin)}
-                className="text-[10px] font-bold bg-[#032B4E] text-white px-2.5 py-1 rounded-md hover:bg-[#043b6b] transition-all cursor-pointer shadow-xs shrink-0"
-              >
-                Autocompletar
-              </button>
-            </div>
-          )}
 
           {/* Feedback Messages */}
           {error && (
@@ -356,45 +314,44 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-3.5" id="auth_role_form">
+          <form onSubmit={handleSubmit} className="space-y-4" id="auth_role_form">
             
             {/* Usuario / Identificador */}
             <div>
-              <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+              <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                 Usuario o Correo Electrónico <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
-                <UserIcon className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <UserIcon className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                 <input
                   type="text"
                   required
-                  placeholder={`Ej. ${currentMeta.defaultUserHint} o correo`}
+                  placeholder="Ingresa tu usuario o correo"
                   value={usernameOrEmail}
                   onChange={(e) => setUsernameOrEmail(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#032B4E] focus:border-transparent transition-all"
+                  className="w-full pl-10 pr-3 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#032B4E] focus:border-transparent transition-all"
                   id="input_auth_username"
+                  autoComplete="username"
                 />
               </div>
             </div>
 
-            {/* PIN / Contraseña con Ojito */}
+            {/* PIN / Contraseña con botón de mostrar/ocultar */}
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                  PIN de Seguridad / Contraseña <span className="text-rose-500">*</span>
-                </label>
-                <span className="text-[10px] text-slate-400 font-mono">Ej: {currentMeta.defaultPin}</span>
-              </div>
+              <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                PIN de Seguridad o Contraseña <span className="text-rose-500">*</span>
+              </label>
               <div className="relative">
-                <KeyRound className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
-                  placeholder="Ingresa tu contraseña o PIN"
+                  placeholder="Ingresa tu PIN o contraseña"
                   value={pin}
                   onChange={(e) => setPin(e.target.value)}
-                  className="w-full pl-9 pr-10 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#032B4E] focus:border-transparent transition-all"
+                  className="w-full pl-10 pr-10 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#032B4E] focus:border-transparent transition-all font-mono"
                   id="input_auth_password"
+                  autoComplete="current-password"
                 />
                 <button
                   type="button"
@@ -415,7 +372,7 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-[#032B4E] hover:bg-[#043b6b] disabled:opacity-60 text-white font-extrabold text-xs uppercase tracking-wider py-3.5 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer mt-3"
+              className="w-full bg-[#032B4E] hover:bg-[#043b6b] disabled:opacity-60 text-white font-extrabold text-xs uppercase tracking-wider py-3.5 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer mt-2"
               id="btn_submit_auth_form"
             >
               {loading ? (
@@ -428,50 +385,6 @@ export function RoleAuthModal({ isOpen = true, role, onClose, onSuccess }: RoleA
               )}
             </button>
           </form>
-
-          {/* Predefined demo accounts footer */}
-          <div className="mt-4 pt-3 border-t border-slate-100 text-center">
-            <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium mb-1.5">
-              Usuarios predefinidos (Haz clic para autocompletar):
-            </p>
-            <div className="flex flex-wrap justify-center gap-1 text-[10px] text-slate-600">
-              <button
-                type="button"
-                onClick={() => handleQuickFill('jonathan', '1111')}
-                className="bg-slate-100 hover:bg-amber-100 hover:text-amber-900 px-2 py-0.5 rounded font-mono border border-slate-200 transition-colors cursor-pointer"
-              >
-                Admin: <b>jonathan</b>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickFill('diana_prod', '2222')}
-                className="bg-slate-100 hover:bg-cyan-100 hover:text-cyan-900 px-2 py-0.5 rounded font-mono border border-slate-200 transition-colors cursor-pointer"
-              >
-                Prod: <b>diana_prod</b>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickFill('carlos_alm', '3333')}
-                className="bg-slate-100 hover:bg-orange-100 hover:text-orange-900 px-2 py-0.5 rounded font-mono border border-slate-200 transition-colors cursor-pointer"
-              >
-                Alm: <b>carlos_alm</b>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickFill('mariana_vta', '4444')}
-                className="bg-slate-100 hover:bg-purple-100 hover:text-purple-900 px-2 py-0.5 rounded font-mono border border-slate-200 transition-colors cursor-pointer"
-              >
-                Vtas: <b>mariana_vta</b>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickFill('pedro_rep', '5555')}
-                className="bg-slate-100 hover:bg-blue-100 hover:text-blue-900 px-2 py-0.5 rounded font-mono border border-slate-200 transition-colors cursor-pointer"
-              >
-                Rep: <b>pedro_rep</b>
-              </button>
-            </div>
-          </div>
 
         </div>
 
