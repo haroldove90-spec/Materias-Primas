@@ -222,7 +222,7 @@ export default function DeliveryRole({ onBack, currentUser }: DeliveryRoleProps)
               <h2 className="text-sm font-extrabold tracking-tight text-white leading-tight">
                 Ruta de Distribución
               </h2>
-              <span className="text-[10px] text-sky-200/80 block">Conductor: {currentUser.name}</span>
+              <span className="text-[10px] text-sky-200/80 block">Conductor: {currentUser?.name || 'Repartidor'}</span>
             </div>
           </div>
           <button 

@@ -700,7 +700,7 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
               Atención a Clientes y Caja Rápida
             </h1>
             <p className="text-xs text-sky-200/80">
-              Vendedor activo: <span className="text-purple-300 font-semibold">{currentUser.name}</span>
+              Vendedor activo: <span className="text-purple-300 font-semibold">{currentUser?.name || 'Vendedor'}</span>
             </p>
           </div>
         </div>

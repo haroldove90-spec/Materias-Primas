@@ -379,7 +379,7 @@ export default function AdminRole({ onBack, currentUser, activeTab: propsActiveT
               Gerencia y Administración
             </h1>
             <p className="text-xs text-sky-200/80">
-              Sesión iniciada como: <span className="text-amber-400 font-semibold">{currentUser.name} (Gerente)</span>
+              Sesión iniciada como: <span className="text-amber-400 font-semibold">{currentUser?.name || 'Administrador'} (Gerente)</span>
             </p>
           </div>
         </div>

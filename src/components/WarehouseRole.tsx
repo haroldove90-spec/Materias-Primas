@@ -344,7 +344,7 @@ export default function WarehouseRole({ onBack, currentUser, activeTab: propsAct
               Almacén y Control de Inventarios
             </h1>
             <p className="text-xs text-sky-200/80">
-              Guardando el stock: <span className="text-orange-300 font-semibold">{currentUser.name}</span>
+              Guardando el stock: <span className="text-orange-300 font-semibold">{currentUser?.name || 'Almacenista'}</span>
             </p>
           </div>
         </div>

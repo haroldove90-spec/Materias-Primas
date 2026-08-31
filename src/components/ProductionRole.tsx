@@ -510,7 +510,7 @@ export default function ProductionRole({ onBack, currentUser, activeTab: propsAc
               Producción y Preparación de Mezclas
             </h1>
             <p className="text-xs text-sky-200/80">
-              Operador activo: <span className="text-cyan-300 font-semibold">{currentUser.name}</span>
+              Operador activo: <span className="text-cyan-300 font-semibold">{currentUser?.name || 'Operador'}</span>
             </p>
           </div>
         </div>

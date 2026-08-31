@@ -8,7 +8,9 @@ import { MockDatabase } from '../data';
 import { saveUserToSupabase } from '../services/supabaseService';
 
 interface UserProfileModalProps {
-  user: User;
+  user?: User;
+  currentUser?: User;
+  isOpen?: boolean;
   onClose: () => void;
   onUpdateUser: (updatedUser: User) => void;
 }
@@ -22,19 +24,43 @@ const PRESET_AVATARS = [
   'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150&auto=format&fit=crop&q=80'
 ];
 
-export const UserProfileModal: React.FC<UserProfileModalProps> = ({ user, onClose, onUpdateUser }) => {
-  const [name, setName] = useState(user.name || '');
-  const [email, setEmail] = useState(user.email || '');
-  const [phone, setPhone] = useState(user.phone || '');
-  const [jobTitle, setJobTitle] = useState(user.jobTitle || '');
-  const [department, setDepartment] = useState(user.department || '');
-  const [bio, setBio] = useState(user.bio || '');
-  const [avatarUrl, setAvatarUrl] = useState(user.avatarUrl || '');
-  const [pin, setPin] = useState(user.pin || '');
+export const UserProfileModal: React.FC<UserProfileModalProps> = ({ 
+  user: propUser, 
+  currentUser: propCurrentUser, 
+  isOpen = true, 
+  onClose, 
+  onUpdateUser 
+}) => {
+  const activeUser = propCurrentUser || propUser;
+  
+  const [name, setName] = useState(activeUser?.name || '');
+  const [email, setEmail] = useState(activeUser?.email || '');
+  const [phone, setPhone] = useState(activeUser?.phone || '');
+  const [jobTitle, setJobTitle] = useState(activeUser?.jobTitle || '');
+  const [department, setDepartment] = useState(activeUser?.department || '');
+  const [bio, setBio] = useState(activeUser?.bio || '');
+  const [avatarUrl, setAvatarUrl] = useState(activeUser?.avatarUrl || '');
+  const [pin, setPin] = useState(activeUser?.pin || '');
   const [showPin, setShowPin] = useState(false);
   const [customAvatarInput, setCustomAvatarInput] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Sync state if activeUser changes
+  React.useEffect(() => {
+    if (activeUser) {
+      setName(activeUser.name || '');
+      setEmail(activeUser.email || '');
+      setPhone(activeUser.phone || '');
+      setJobTitle(activeUser.jobTitle || '');
+      setDepartment(activeUser.department || '');
+      setBio(activeUser.bio || '');
+      setAvatarUrl(activeUser.avatarUrl || '');
+      setPin(activeUser.pin || '');
+    }
+  }, [activeUser]);
+
+  if (!isOpen || !activeUser) return null;
 
   // Generate secure PIN/Password
   const handleGenerateSecurePin = () => {
@@ -77,7 +103,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ user, onClos
     setFeedbackMsg(null);
 
     const updated: User = {
-      ...user,
+      ...activeUser,
       name: name.trim(),
       email: email.trim(),
       phone: phone.trim(),
@@ -90,7 +116,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ user, onClos
 
     // 1. Update in LocalStorage
     const allUsers = MockDatabase.getUsers();
-    const index = allUsers.findIndex(u => u.id === user.id || u.username.toLowerCase() === user.username.toLowerCase());
+    const index = allUsers.findIndex(u => u.id === activeUser.id || u.username.toLowerCase() === activeUser.username.toLowerCase());
     if (index >= 0) {
       allUsers[index] = updated;
     } else {
@@ -98,10 +124,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ user, onClos
     }
     MockDatabase.saveUsers(allUsers);
     MockDatabase.addAuditLog(
-      user.name,
+      activeUser.name,
       'Actualizó su perfil de usuario',
       'Perfil',
-      `Cambio de datos de contacto y credenciales de ${user.username}`
+      `Cambio de datos de contacto y credenciales de ${activeUser.username}`
     );
 
     // 2. Sync to Supabase Cloud
@@ -254,7 +280,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ user, onClos
               <input 
                 type="text"
                 disabled
-                value={user.username}
+                value={activeUser.username}
                 className="w-full px-3 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-500 cursor-not-allowed font-mono"
               />
             </div>
@@ -356,7 +382,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ user, onClos
               <div className="mt-1 flex items-center gap-2">
                 <span className="text-[11px] text-slate-500">Rol asignado:</span>
                 <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-200 text-slate-700">
-                  {user.role}
+                  {activeUser.role}
                 </span>
               </div>
             </div>
