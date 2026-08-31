@@ -12,8 +12,10 @@ import {
   INITIAL_SYSTEM_CONFIG, 
   INITIAL_PURCHASE_ORDERS, 
   INITIAL_TRANSFER_SHEETS, 
-  INITIAL_SALE_NOTES 
+  INITIAL_SALE_NOTES,
+  INITIAL_SUPPLIERS 
 } from '../data';
+import { Supplier, User, Client, RawMaterial } from '../types';
 
 export const SUPABASE_SQL_SCRIPT = `-- ==============================================================================
 -- ERP MATERIAS PRIMAS & INSUMOS DE PANIFICACIÓN / REPOSTERÍA
@@ -22,20 +24,61 @@ export const SUPABASE_SQL_SCRIPT = `-- =========================================
 -- URL: ${SUPABASE_URL}
 -- ==============================================================================
 
--- 1. TABLA: USUARIOS Y ROLES (users)
+-- 1. TABLA: USUARIOS, CREDENCIALES Y PERFILES (users)
 CREATE TABLE IF NOT EXISTS public.users (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     username TEXT UNIQUE NOT NULL,
     email TEXT,
+    phone TEXT,
     role TEXT NOT NULL CHECK (role IN ('admin', 'production', 'warehouse', 'sales', 'delivery')),
     pin TEXT NOT NULL,
     active BOOLEAN NOT NULL DEFAULT true,
     permissions JSONB NOT NULL DEFAULT '[]'::jsonb,
+    avatar_url TEXT,
+    job_title TEXT,
+    department TEXT,
+    bio TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 2. TABLA: INVENTARIO DE MATERIAS PRIMAS E INSUMOS (raw_materials)
+-- Asegurar columnas si la tabla ya existía previamente
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS job_title TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS department TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS bio TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS permissions JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+-- 2. TABLA: PROVEEDORES (suppliers)
+CREATE TABLE IF NOT EXISTS public.suppliers (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    rfc TEXT,
+    contact_name TEXT,
+    email TEXT,
+    phone TEXT,
+    whatsapp TEXT,
+    address TEXT,
+    category TEXT DEFAULT 'Materia Prima',
+    payment_terms TEXT DEFAULT 'Contado',
+    credit_days INTEGER NOT NULL DEFAULT 0,
+    credit_limit NUMERIC NOT NULL DEFAULT 0,
+    current_debt NUMERIC NOT NULL DEFAULT 0,
+    active BOOLEAN NOT NULL DEFAULT true,
+    rating INTEGER NOT NULL DEFAULT 5,
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.suppliers ADD COLUMN IF NOT EXISTS whatsapp TEXT;
+ALTER TABLE public.suppliers ADD COLUMN IF NOT EXISTS address TEXT;
+ALTER TABLE public.suppliers ADD COLUMN IF NOT EXISTS contact_name TEXT;
+
+-- 3. TABLA: INVENTARIO DE MATERIAS PRIMAS E INSUMOS (raw_materials)
 CREATE TABLE IF NOT EXISTS public.raw_materials (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -49,7 +92,7 @@ CREATE TABLE IF NOT EXISTS public.raw_materials (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 3. TABLA: FÓRMULAS Y RECETAS (formulas)
+-- 4. TABLA: FÓRMULAS Y RECETAS (formulas)
 CREATE TABLE IF NOT EXISTS public.formulas (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -62,7 +105,7 @@ CREATE TABLE IF NOT EXISTS public.formulas (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 4. TABLA: ÓRDENES DE PRODUCCIÓN (production_orders)
+-- 5. TABLA: ÓRDENES DE PRODUCCIÓN (production_orders)
 CREATE TABLE IF NOT EXISTS public.production_orders (
     id TEXT PRIMARY KEY,
     lote TEXT,
@@ -78,21 +121,26 @@ CREATE TABLE IF NOT EXISTS public.production_orders (
     qa_check JSONB
 );
 
--- 5. TABLA: CLIENTES Y CRÉDITOS (clients)
+-- 6. TABLA: CLIENTES Y CRÉDITOS (clients)
 CREATE TABLE IF NOT EXISTS public.clients (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     rfc TEXT,
     email TEXT,
     phone TEXT,
-    price_list TEXT NOT NULL DEFAULT 'Público' CHECK (price_list IN ('Público', 'Mayoreo', 'Distribuidor')),
+    whatsapp TEXT,
+    address TEXT,
+    price_list TEXT NOT NULL DEFAULT 'Público',
     credit_days INTEGER NOT NULL DEFAULT 0,
     credit_limit NUMERIC NOT NULL DEFAULT 0,
     current_debt NUMERIC NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 6. TABLA: VENTAS Y COTIZACIONES (sales)
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS whatsapp TEXT;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS address TEXT;
+
+-- 7. TABLA: VENTAS Y COTIZACIONES (sales)
 CREATE TABLE IF NOT EXISTS public.sales (
     id TEXT PRIMARY KEY,
     client_id TEXT REFERENCES public.clients(id) ON DELETE SET NULL,
@@ -101,22 +149,22 @@ CREATE TABLE IF NOT EXISTS public.sales (
     subtotal NUMERIC NOT NULL DEFAULT 0,
     tax NUMERIC NOT NULL DEFAULT 0,
     total NUMERIC NOT NULL DEFAULT 0,
-    payment_type TEXT NOT NULL DEFAULT 'Contado' CHECK (payment_type IN ('Contado', 'Crédito')),
-    status TEXT NOT NULL DEFAULT 'Cotización' CHECK (status IN ('Cotización', 'Pedido Activo', 'Entregado', 'Cancelado')),
-    billing_type TEXT NOT NULL DEFAULT 'Remisión' CHECK (billing_type IN ('Remisión', 'CFDI')),
+    payment_type TEXT NOT NULL DEFAULT 'Contado',
+    status TEXT NOT NULL DEFAULT 'Cotización',
+    billing_type TEXT NOT NULL DEFAULT 'Remisión',
     cfdi_status TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     credit_days_left INTEGER,
     amount_paid NUMERIC NOT NULL DEFAULT 0
 );
 
--- 7. TABLA: RUTAS DE ENTREGA Y LOGÍSTICA (delivery_routes)
+-- 8. TABLA: RUTAS DE ENTREGA Y LOGÍSTICA (delivery_routes)
 CREATE TABLE IF NOT EXISTS public.delivery_routes (
     id TEXT PRIMARY KEY,
     sale_id TEXT REFERENCES public.sales(id) ON DELETE CASCADE,
     client_name TEXT NOT NULL,
     address TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'pendiente' CHECK (status IN ('pendiente', 'en_ruta', 'entregado')),
+    status TEXT NOT NULL DEFAULT 'pendiente',
     delivered_at TIMESTAMPTZ,
     evidence_signature TEXT,
     evidence_photo TEXT,
@@ -126,11 +174,11 @@ CREATE TABLE IF NOT EXISTS public.delivery_routes (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 8. TABLA: MOVIMIENTOS DE KARDEX / ALMACÉN (stock_movements)
+-- 9. TABLA: MOVIMIENTOS DE KARDEX / ALMACÉN (stock_movements)
 CREATE TABLE IF NOT EXISTS public.stock_movements (
     id TEXT PRIMARY KEY,
     material_id TEXT REFERENCES public.raw_materials(id) ON DELETE SET NULL,
-    type TEXT NOT NULL CHECK (type IN ('entrada_compra', 'salida_produccion', 'salida_venta', 'merma', 'ajuste')),
+    type TEXT NOT NULL,
     quantity NUMERIC NOT NULL,
     date TIMESTAMPTZ NOT NULL DEFAULT now(),
     lote TEXT,
@@ -140,7 +188,7 @@ CREATE TABLE IF NOT EXISTS public.stock_movements (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 9. TABLA: ÓRDENES DE COMPRA / PROCUREMENT (purchase_orders)
+-- 10. TABLA: ÓRDENES DE COMPRA / PROCUREMENT (purchase_orders)
 CREATE TABLE IF NOT EXISTS public.purchase_orders (
     id TEXT PRIMARY KEY,
     supplier_name TEXT NOT NULL,
@@ -148,13 +196,13 @@ CREATE TABLE IF NOT EXISTS public.purchase_orders (
     subtotal NUMERIC NOT NULL DEFAULT 0,
     tax NUMERIC NOT NULL DEFAULT 0,
     total NUMERIC NOT NULL DEFAULT 0,
-    status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'ordered', 'received')),
+    status TEXT NOT NULL DEFAULT 'draft',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     received_at TIMESTAMPTZ,
     invoice_number TEXT
 );
 
--- 10. TABLA: HOJAS DE TRASLADO DE PRODUCTOS (transfer_sheets)
+-- 11. TABLA: HOJAS DE TRASLADO DE PRODUCTOS (transfer_sheets)
 CREATE TABLE IF NOT EXISTS public.transfer_sheets (
     id TEXT PRIMARY KEY,
     folio TEXT NOT NULL,
@@ -182,7 +230,7 @@ CREATE TABLE IF NOT EXISTS public.transfer_sheets (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 11. TABLA: NOTAS DE VENTA MIAULOO (sale_notes)
+-- 12. TABLA: NOTAS DE VENTA MIAULOO (sale_notes)
 CREATE TABLE IF NOT EXISTS public.sale_notes (
     id TEXT PRIMARY KEY,
     note_no TEXT NOT NULL,
@@ -197,7 +245,7 @@ CREATE TABLE IF NOT EXISTS public.sale_notes (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 12. TABLA: BITÁCORA DE AUDITORÍA (audit_logs)
+-- 13. TABLA: BITÁCORA DE AUDITORÍA (audit_logs)
 CREATE TABLE IF NOT EXISTS public.audit_logs (
     id TEXT PRIMARY KEY,
     user_name TEXT NOT NULL,
@@ -207,7 +255,7 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
     details TEXT
 );
 
--- 13. TABLA: CONFIGURACIÓN GENERAL DEL SISTEMA (system_config)
+-- 14. TABLA: CONFIGURACIÓN GENERAL DEL SISTEMA (system_config)
 CREATE TABLE IF NOT EXISTS public.system_config (
     id TEXT PRIMARY KEY DEFAULT 'default',
     max_discount_public NUMERIC NOT NULL DEFAULT 5,
@@ -222,6 +270,7 @@ CREATE TABLE IF NOT EXISTS public.system_config (
 -- ==============================================================================
 
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.suppliers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.raw_materials ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.formulas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.production_orders ENABLE ROW LEVEL SECURITY;
@@ -238,6 +287,9 @@ ALTER TABLE public.system_config ENABLE ROW LEVEL SECURITY;
 -- Políticas de lectura/escritura anónimas públicas para la App
 DROP POLICY IF EXISTS "Permitir todo a anon users" ON public.users;
 CREATE POLICY "Permitir todo a anon users" ON public.users FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Permitir todo a anon suppliers" ON public.suppliers;
+CREATE POLICY "Permitir todo a anon suppliers" ON public.suppliers FOR ALL USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Permitir todo a anon raw_materials" ON public.raw_materials;
 CREATE POLICY "Permitir todo a anon raw_materials" ON public.raw_materials FOR ALL USING (true) WITH CHECK (true);
@@ -274,6 +326,11 @@ CREATE POLICY "Permitir todo a anon audit_logs" ON public.audit_logs FOR ALL USI
 
 DROP POLICY IF EXISTS "Permitir todo a anon system_config" ON public.system_config;
 CREATE POLICY "Permitir todo a anon system_config" ON public.system_config FOR ALL USING (true) WITH CHECK (true);
+
+-- Permisos globales para anon y authenticated
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated;
 
 -- ==============================================================================
 -- INSERCIÓN DE DATOS DE PRUEBA / SEED DATA
@@ -711,6 +768,29 @@ export async function seedSupabaseFromClient(): Promise<{ success: boolean; mess
     );
     results.audit_logs = errAud ? errAud.message : 'OK';
 
+    // 13. Suppliers
+    const { error: errSupp } = await supabase.from('suppliers').upsert(
+      INITIAL_SUPPLIERS.map(s => ({
+        id: s.id,
+        name: s.name,
+        rfc: s.rfc,
+        contact_name: s.contactName,
+        email: s.email,
+        phone: s.phone,
+        address: s.address,
+        category: s.category,
+        payment_terms: s.paymentTerms,
+        credit_days: s.creditDays,
+        credit_limit: s.creditLimit,
+        current_debt: s.currentDebt,
+        active: s.active,
+        rating: s.rating,
+        notes: s.notes,
+        created_at: s.createdAt
+      }))
+    );
+    results.suppliers = errSupp ? errSupp.message : 'OK';
+
     // Check if any major error occurred (likely table doesn't exist yet before SQL is run)
     const errors = Object.entries(results).filter(([_, v]) => v !== 'OK');
     if (errors.length > 0) {
@@ -782,10 +862,16 @@ export async function fetchUsersFromSupabase() {
       name: u.name || 'Usuario',
       username: (u.username || u.name || 'usuario').toLowerCase().trim(),
       email: u.email || (u.username && u.username.includes('@') ? u.username : `${u.username || 'usuario'}@miauloo.com`),
+      phone: u.phone || '',
       role: u.role || 'sales',
       pin: String(u.pin || '1234'),
       active: u.active !== undefined ? Boolean(u.active) : true,
-      permissions: Array.isArray(u.permissions) ? u.permissions : []
+      permissions: Array.isArray(u.permissions) ? u.permissions : [],
+      avatarUrl: u.avatar_url || '',
+      jobTitle: u.job_title || '',
+      department: u.department || '',
+      bio: u.bio || '',
+      createdAt: u.created_at || new Date().toISOString()
     }));
 
     return { success: true, data: normalizedUsers };
@@ -812,19 +898,39 @@ export async function updateUserRoleInSupabase(userId: string, newRole: 'admin' 
 }
 
 // Safely upsert a user into Supabase with schema fallback
-export async function saveUserToSupabase(user: {
+export async function saveUserToSupabase(user: Partial<User> & {
   id: string;
   name: string;
   username: string;
-  email?: string;
   role: string;
   pin: string;
-  active?: boolean;
-  permissions?: string[];
 }): Promise<{ success: boolean; error?: string }> {
   try {
-    // 1. Try full schema
+    // 1. Try full schema with profile fields
     const { error: fullErr } = await supabase.from('users').upsert({
+      id: user.id,
+      name: user.name,
+      username: user.username,
+      email: user.email || `${user.username}@miauloo.com`,
+      phone: user.phone || '',
+      role: user.role,
+      pin: user.pin,
+      active: user.active ?? true,
+      permissions: user.permissions || [],
+      avatar_url: user.avatarUrl || '',
+      job_title: user.jobTitle || '',
+      department: user.department || '',
+      bio: user.bio || ''
+    });
+
+    if (!fullErr) {
+      return { success: true };
+    }
+
+    console.warn('Full schema user insert warning, attempting standard schema fallback:', fullErr.message);
+
+    // 2. Fallback to standard columns
+    const { error: standardErr } = await supabase.from('users').upsert({
       id: user.id,
       name: user.name,
       username: user.username,
@@ -835,13 +941,11 @@ export async function saveUserToSupabase(user: {
       permissions: user.permissions || []
     });
 
-    if (!fullErr) {
+    if (!standardErr) {
       return { success: true };
     }
 
-    console.warn('Full schema user insert warning, attempting 5-column fallback:', fullErr.message);
-
-    // 2. Fallback to core columns (id, name, username, role, pin)
+    // 3. Fallback to core columns (id, name, username, role, pin)
     const { error: coreErr } = await supabase.from('users').upsert({
       id: user.id,
       name: user.name,
@@ -858,6 +962,232 @@ export async function saveUserToSupabase(user: {
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err?.message || 'Error al guardar usuario en Supabase' };
+  }
+}
+
+// Delete user from Supabase
+export async function deleteUserFromSupabase(userId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.from('users').delete().eq('id', userId);
+    if (error) throw error;
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Error al eliminar usuario' };
+  }
+}
+
+// ==============================================================================
+// PROVEEDORES (SUPPLIERS) CRUD & SYNC
+// ==============================================================================
+
+export async function fetchSuppliersFromSupabase(): Promise<{ success: boolean; data?: Supplier[]; error?: string }> {
+  try {
+    const { data, error } = await supabase
+      .from('suppliers')
+      .select('*')
+      .order('name', { ascending: true });
+
+    if (error) throw error;
+
+    const formatted: Supplier[] = (data || []).map((s: any) => ({
+      id: s.id,
+      name: s.name,
+      rfc: s.rfc || '',
+      contactName: s.contact_name || '',
+      email: s.email || '',
+      phone: s.phone || '',
+      whatsapp: s.whatsapp || s.phone || '',
+      address: s.address || '',
+      category: s.category || 'Materia Prima',
+      paymentTerms: s.payment_terms || 'Contado',
+      creditDays: Number(s.credit_days || 0),
+      creditLimit: Number(s.credit_limit || 0),
+      currentDebt: Number(s.current_debt || 0),
+      active: s.active !== undefined ? Boolean(s.active) : true,
+      rating: Number(s.rating || 5),
+      notes: s.notes || '',
+      createdAt: s.created_at || new Date().toISOString()
+    }));
+
+    return { success: true, data: formatted };
+  } catch (e: any) {
+    console.warn('Supabase fetchSuppliers error:', e?.message);
+    return { success: false, error: e?.message || 'Error al obtener proveedores' };
+  }
+}
+
+export async function saveSupplierToSupabase(supplier: Supplier): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.from('suppliers').upsert({
+      id: supplier.id,
+      name: supplier.name,
+      rfc: supplier.rfc || null,
+      contact_name: supplier.contactName || null,
+      email: supplier.email || null,
+      phone: supplier.phone || null,
+      whatsapp: supplier.whatsapp || supplier.phone || null,
+      address: supplier.address || null,
+      category: supplier.category || 'Materia Prima',
+      payment_terms: supplier.paymentTerms || 'Contado',
+      credit_days: supplier.creditDays || 0,
+      credit_limit: supplier.creditLimit || 0,
+      current_debt: supplier.currentDebt || 0,
+      active: supplier.active ?? true,
+      rating: supplier.rating || 5,
+      notes: supplier.notes || null,
+      created_at: supplier.createdAt || new Date().toISOString()
+    });
+
+    if (error) throw error;
+    return { success: true };
+  } catch (e: any) {
+    console.error('saveSupplierToSupabase error:', e?.message);
+    return { success: false, error: e?.message || 'Error al guardar proveedor en Supabase' };
+  }
+}
+
+export async function deleteSupplierInSupabase(supplierId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.from('suppliers').delete().eq('id', supplierId);
+    if (error) throw error;
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Error al eliminar proveedor' };
+  }
+}
+
+// ==============================================================================
+// CLIENTES (CLIENTS) CRUD & SYNC
+// ==============================================================================
+
+export async function fetchClientsFromSupabase(): Promise<{ success: boolean; data?: Client[]; error?: string }> {
+  try {
+    const { data, error } = await supabase
+      .from('clients')
+      .select('*')
+      .order('name', { ascending: true });
+
+    if (error) throw error;
+
+    const formatted: Client[] = (data || []).map((c: any) => ({
+      id: c.id,
+      name: c.name,
+      rfc: c.rfc || '',
+      email: c.email || '',
+      phone: c.phone || '',
+      whatsapp: c.whatsapp || c.phone || '',
+      address: c.address || '',
+      priceList: c.price_list || 'Público',
+      creditDays: Number(c.credit_days || 0),
+      creditLimit: Number(c.credit_limit || 0),
+      currentDebt: Number(c.current_debt || 0),
+      createdAt: c.created_at || new Date().toISOString()
+    }));
+
+    return { success: true, data: formatted };
+  } catch (e: any) {
+    console.warn('Supabase fetchClients error:', e?.message);
+    return { success: false, error: e?.message || 'Error al obtener clientes' };
+  }
+}
+
+export async function saveClientToSupabase(client: Client): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.from('clients').upsert({
+      id: client.id,
+      name: client.name,
+      rfc: client.rfc || null,
+      email: client.email || null,
+      phone: client.phone || null,
+      whatsapp: client.whatsapp || client.phone || null,
+      address: client.address || null,
+      price_list: client.priceList || 'Público',
+      credit_days: client.creditDays || 0,
+      credit_limit: client.creditLimit || 0,
+      current_debt: client.currentDebt || 0,
+      created_at: client.createdAt || new Date().toISOString()
+    });
+
+    if (error) throw error;
+    return { success: true };
+  } catch (e: any) {
+    console.error('saveClientToSupabase error:', e?.message);
+    return { success: false, error: e?.message || 'Error al guardar cliente en Supabase' };
+  }
+}
+
+export async function deleteClientInSupabase(clientId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.from('clients').delete().eq('id', clientId);
+    if (error) throw error;
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Error al eliminar cliente' };
+  }
+}
+
+// ==============================================================================
+// MATERIAS PRIMAS (RAW MATERIALS) CRUD & SYNC
+// ==============================================================================
+
+export async function fetchRawMaterialsFromSupabase(): Promise<{ success: boolean; data?: RawMaterial[]; error?: string }> {
+  try {
+    const { data, error } = await supabase
+      .from('raw_materials')
+      .select('*')
+      .order('name', { ascending: true });
+
+    if (error) throw error;
+
+    const formatted: RawMaterial[] = (data || []).map((m: any) => ({
+      id: m.id,
+      name: m.name,
+      sku: m.sku || '',
+      stock: Number(m.stock || 0),
+      unit: m.unit || 'kg',
+      minStock: Number(m.min_stock || 0),
+      costPerUnit: Number(m.cost_per_unit || 0),
+      loteProveedor: m.lote_proveedor || '',
+      expiryDate: m.expiry_date || ''
+    }));
+
+    return { success: true, data: formatted };
+  } catch (e: any) {
+    console.warn('Supabase fetchRawMaterials error:', e?.message);
+    return { success: false, error: e?.message || 'Error al obtener materias primas' };
+  }
+}
+
+export async function saveRawMaterialToSupabase(material: RawMaterial): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.from('raw_materials').upsert({
+      id: material.id,
+      name: material.name,
+      sku: material.sku,
+      stock: material.stock,
+      unit: material.unit,
+      min_stock: material.minStock,
+      cost_per_unit: material.costPerUnit,
+      lote_proveedor: material.loteProveedor || null,
+      expiry_date: material.expiryDate || null,
+      created_at: new Date().toISOString()
+    });
+
+    if (error) throw error;
+    return { success: true };
+  } catch (e: any) {
+    console.error('saveRawMaterialToSupabase error:', e?.message);
+    return { success: false, error: e?.message || 'Error al guardar materia prima en Supabase' };
+  }
+}
+
+export async function deleteRawMaterialInSupabase(materialId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.from('raw_materials').delete().eq('id', materialId);
+    if (error) throw error;
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Error al eliminar materia prima' };
   }
 }
 

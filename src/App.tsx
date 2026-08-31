@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Shield, Beaker, Package, ShoppingCart, Truck, RefreshCw, Home, LogOut,
   BarChart3, DollarSign, Settings, Activity, Layers, Users, FileCheck, MapPin,
-  FileText, Receipt, Database, ChevronRight, Lock
+  FileText, Receipt, Database, ChevronRight, Lock, User as UserIcon, Edit3
 } from 'lucide-react';
 import { MockDatabase, INITIAL_USERS } from './data';
 import { User, RoleType } from './types';
@@ -17,6 +17,7 @@ import { RoleAuthModal } from './components/RoleAuthModal';
 import { SupabaseModal } from './components/SupabaseModal';
 import { SupabaseSmartButton } from './components/SupabaseSmartButton';
 import { SaveTelemetryToast } from './components/SaveTelemetryToast';
+import { UserProfileModal } from './components/UserProfileModal';
 import { recordSaveTelemetry } from './services/supabaseTelemetry';
 import { SUPABASE_PROJECT_INFO } from './lib/supabase';
 
@@ -27,6 +28,7 @@ export default function App() {
   const [activeRoleTab, setActiveRoleTab] = useState<string>('analytics');
   const [showSupabaseModal, setShowSupabaseModal] = useState(false);
   const [modalInitialTab, setModalInitialTab] = useState<'status' | 'sync' | 'history' | 'sql' | 'tables'>('status');
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
   // Modal for role-based authentication and registration
   const [authModalRole, setAuthModalRole] = useState<RoleType | null>(null);
@@ -136,6 +138,10 @@ export default function App() {
     admin: [
       { id: 'analytics', label: 'Dashboard', shortLabel: 'Dashboard', icon: BarChart3 },
       { id: 'finances', label: 'Finanzas y Crédito', shortLabel: 'Finanzas', icon: DollarSign },
+      { id: 'clients', label: 'Clientes', shortLabel: 'Clientes', icon: Users },
+      { id: 'suppliers', label: 'Proveedores', shortLabel: 'Proveedores', icon: Truck },
+      { id: 'raw_materials', label: 'Inventario Primas', shortLabel: 'Mat. Primas', icon: Package },
+      { id: 'employees', label: 'Empleados y Accesos', shortLabel: 'Personal', icon: Shield },
       { id: 'config', label: 'Configuración', shortLabel: 'Ajustes', icon: Settings },
     ],
     production: [
@@ -147,6 +153,7 @@ export default function App() {
       { id: 'inventory', label: 'Inventario Insumos', shortLabel: 'Stock', icon: Package },
       { id: 'traceability', label: 'Kárdex / Historial', shortLabel: 'Kárdex', icon: RefreshCw },
       { id: 'purchasing', label: 'Órdenes de Compra', shortLabel: 'Compras', icon: ShoppingCart },
+      { id: 'suppliers', label: 'Proveedores', shortLabel: 'Proveedores', icon: Truck },
     ],
     sales: [
       { id: 'pos', label: 'Punto de Venta', shortLabel: 'Caja', icon: ShoppingCart },
@@ -352,6 +359,21 @@ export default function App() {
         
         {/* Supabase & Cerrar Sesión Button (Mobile & Tablet) */}
         <div className="flex items-center gap-2 shrink-0">
+          {currentUser && (
+            <button
+              onClick={() => setShowProfileModal(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-semibold transition-all border border-white/20"
+              title="Mi Perfil"
+            >
+              {currentUser.avatarUrl ? (
+                <img src={currentUser.avatarUrl} alt={currentUser.name} className="w-5 h-5 rounded-full object-cover" referrerPolicy="no-referrer" />
+              ) : (
+                <UserIcon className="w-4 h-4 text-amber-300" />
+              )}
+              <span className="hidden sm:inline">Mi Perfil</span>
+            </button>
+          )}
+
           <SupabaseSmartButton 
             onClick={() => openSupabaseWithTab('status')}
             variant="compact"
@@ -478,15 +500,49 @@ export default function App() {
             />
           )}
 
-          <div className="flex items-center justify-between px-2 pt-1">
-            <div className="flex flex-col">
-              <span className="text-[10px] text-slate-400 font-semibold uppercase">Usuario</span>
-              <span className="text-xs font-bold text-slate-800">{currentUser?.name}</span>
+          {/* Tarjeta de Perfil de Usuario con foto y botón para editar */}
+          {currentUser && (
+            <div 
+              onClick={() => setShowProfileModal(true)}
+              className="p-2.5 bg-white hover:bg-sky-50/60 rounded-xl border border-slate-200 hover:border-sky-300 transition-all cursor-pointer shadow-xs group"
+              title="Haz clic para ver o editar tu perfil"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="relative shrink-0">
+                  {currentUser.avatarUrl ? (
+                    <img 
+                      src={currentUser.avatarUrl} 
+                      alt={currentUser.name} 
+                      className="w-8 h-8 rounded-full object-cover border border-slate-200"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-[#032B4E] text-white font-bold text-xs flex items-center justify-center">
+                      {currentUser.name.charAt(0)}
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-800 truncate block group-hover:text-[#032B4E]">
+                      {currentUser.name}
+                    </span>
+                    <Edit3 className="w-3 h-3 text-slate-400 group-hover:text-[#032B4E] shrink-0 ml-1" />
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded font-bold uppercase">
+                      {currentUser.role}
+                    </span>
+                    {currentUser.phone && (
+                      <span className="text-[9px] text-slate-400 truncate">
+                        {currentUser.phone}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
-            <span className="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-bold uppercase">
-              {activeRole}
-            </span>
-          </div>
+          )}
           
           <button
             onClick={handleLogout}
@@ -503,6 +559,16 @@ export default function App() {
       <main className="flex-1 overflow-auto bg-[#F8FAFC] pb-20 lg:pb-0 min-h-0">
         {renderActiveDashboard()}
       </main>
+
+      {/* User Profile Modal (Visible across ALL roles) */}
+      {currentUser && (
+        <UserProfileModal 
+          isOpen={showProfileModal}
+          onClose={() => setShowProfileModal(false)}
+          currentUser={currentUser}
+          onUpdateUser={(updatedUser) => setCurrentUser(updatedUser)}
+        />
+      )}
 
       {/* Save Telemetry Toast */}
       <SaveTelemetryToast 

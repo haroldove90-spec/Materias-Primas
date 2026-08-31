@@ -1,11 +1,164 @@
-import { RawMaterial, Formula, ProductionOrder, StockMovement, Client, Sale, DeliveryRoute, AuditLog, User, SystemConfig, PurchaseOrder, TransferSheet, SaleNote } from './types';
+import { RawMaterial, Formula, ProductionOrder, StockMovement, Client, Sale, DeliveryRoute, AuditLog, User, SystemConfig, PurchaseOrder, TransferSheet, SaleNote, Supplier } from './types';
 
 export const INITIAL_USERS: User[] = [
-  { id: 'u-1', name: 'Jonathan (Gerente)', username: 'jonathan', email: 'gerencia@miauloo.com', role: 'admin', pin: '1111', active: true, permissions: ['dashboard', 'finanzas', 'configuracion'] },
-  { id: 'u-2', name: 'Diana (Producción)', username: 'diana_prod', email: 'produccion@miauloo.com', role: 'production', pin: '2222', active: true, permissions: ['formulas', 'ordenes'] },
-  { id: 'u-3', name: 'Carlos (Almacenista)', username: 'carlos_alm', email: 'almacen@miauloo.com', role: 'warehouse', pin: '3333', active: true, permissions: ['inventario', 'trazabilidad'] },
-  { id: 'u-4', name: 'Mariana (Agente Ventas)', username: 'mariana_vta', email: 'ventas@miauloo.com', role: 'sales', pin: '4444', active: true, permissions: ['crm', 'caja'] },
-  { id: 'u-5', name: 'Pedro (Repartidor)', username: 'pedro_rep', email: 'reparto@miauloo.com', role: 'delivery', pin: '5555', active: true, permissions: ['entregas'] },
+  { 
+    id: 'u-1', 
+    name: 'Jonathan (Gerente)', 
+    username: 'jonathan', 
+    email: 'gerencia@miauloo.com', 
+    phone: '55-4190-2210',
+    role: 'admin', 
+    pin: '1111', 
+    active: true, 
+    jobTitle: 'Director General & Operaciones',
+    department: 'Dirección General',
+    permissions: ['*'] 
+  },
+  { 
+    id: 'u-2', 
+    name: 'Diana (Producción)', 
+    username: 'diana_prod', 
+    email: 'produccion@miauloo.com', 
+    phone: '55-3210-9944',
+    role: 'production', 
+    pin: '2222', 
+    active: true, 
+    jobTitle: 'Jefa de Planta y Control de Calidad',
+    department: 'Planta Química',
+    permissions: ['formulas', 'ordenes', 'mrp'] 
+  },
+  { 
+    id: 'u-3', 
+    name: 'Carlos (Almacenista)', 
+    username: 'carlos_alm', 
+    email: 'almacen@miauloo.com', 
+    phone: '55-8822-1100',
+    role: 'warehouse', 
+    pin: '3333', 
+    active: true, 
+    jobTitle: 'Encargado de Almacén y Compras',
+    department: 'Almacén y Logística',
+    permissions: ['inventario', 'trazabilidad', 'purchasing', 'suppliers'] 
+  },
+  { 
+    id: 'u-4', 
+    name: 'Mariana (Agente Ventas)', 
+    username: 'mariana_vta', 
+    email: 'ventas@miauloo.com', 
+    phone: '55-6677-8899',
+    role: 'sales', 
+    pin: '4444', 
+    active: true, 
+    jobTitle: 'Ejecutiva Comercial y Facturación',
+    department: 'Ventas y Atención al Cliente',
+    permissions: ['crm', 'caja', 'pos', 'cobranza', 'notas'] 
+  },
+  { 
+    id: 'u-5', 
+    name: 'Pedro (Repartidor)', 
+    username: 'pedro_rep', 
+    email: 'reparto@miauloo.com', 
+    phone: '55-1122-3344',
+    role: 'delivery', 
+    pin: '5555', 
+    active: true, 
+    jobTitle: 'Operador de Ruta y Envíos',
+    department: 'Distribución y Rutas',
+    permissions: ['entregas', 'rutas'] 
+  },
+];
+
+export const INITIAL_SUPPLIERS: Supplier[] = [
+  {
+    id: 'prov-1',
+    name: 'Distribuidora Harinera del Centro S.A. de C.V.',
+    rfc: 'DHC090415KT3',
+    contactName: 'Ing. Fernando Morales',
+    email: 'ventas@harineracentro.com.mx',
+    phone: '55-5390-8800',
+    address: 'Av. Industrial Molinera #120, Parque Industrial Vallejo, CDMX',
+    category: 'Materia Prima',
+    paymentTerms: 'Crédito 30 días',
+    creditDays: 30,
+    creditLimit: 120000,
+    currentDebt: 15000,
+    active: true,
+    rating: 5,
+    notes: 'Proveedor certificado ISO-9001. Entrega en 48 horas tras emisión de OC.',
+    createdAt: '2026-06-01T08:00:00Z'
+  },
+  {
+    id: 'prov-2',
+    name: 'Grenetinas Premium y Aditivos de Occidente',
+    rfc: 'GPA140822MN8',
+    contactName: 'Lic. Sofía Villaseñor',
+    email: 'contacto@grenetinasoccidente.com',
+    phone: '33-3810-4422',
+    address: 'Calzada González Gallo #1450, Guadalajara, Jalisco',
+    category: 'Materia Prima',
+    paymentTerms: 'Crédito 15 días',
+    creditDays: 15,
+    creditLimit: 80000,
+    currentDebt: 25000,
+    active: true,
+    rating: 5,
+    notes: 'Especialista en grenetinas 280-300 Bloom y agentes gelificantes.',
+    createdAt: '2026-06-10T10:30:00Z'
+  },
+  {
+    id: 'prov-3',
+    name: 'Envases y Termoformados Plásticos del Bajío',
+    rfc: 'ETP180210RR1',
+    contactName: 'Roberto Garza Treviño',
+    email: 'pedidos@envasesbajio.mx',
+    phone: '477-710-5588',
+    address: 'Blvd. Aeropuerto Km 8.5, León, Guanajuato',
+    category: 'Empaques',
+    paymentTerms: 'Contado',
+    creditDays: 0,
+    creditLimit: 0,
+    currentDebt: 0,
+    active: true,
+    rating: 4,
+    notes: 'Suministra domos pasteleros, charolas doradas y vasos grado alimenticio.',
+    createdAt: '2026-06-15T12:00:00Z'
+  },
+  {
+    id: 'prov-4',
+    name: 'Esencias, Fragancias y Colorantes DOW-GIV',
+    rfc: 'EFC120305HY9',
+    contactName: 'Química Laura Benítez',
+    email: 'atencion@dowgiv-mexico.com',
+    phone: '55-5872-9011',
+    address: 'Circuito Químico Industrial #40, Tlalnepantla, Edo. Méx.',
+    category: 'Químicos',
+    paymentTerms: 'Crédito 45 días',
+    creditDays: 45,
+    creditLimit: 200000,
+    currentDebt: 0,
+    active: true,
+    rating: 5,
+    notes: 'Hojas de seguridad (MSDS) y certificados de lote incluidos en cada entrega.',
+    createdAt: '2026-06-20T14:15:00Z'
+  },
+  {
+    id: 'prov-5',
+    name: 'Desechables e Insumos Comerciales San Juan',
+    rfc: 'DIC200901PP4',
+    contactName: 'Héctor Jiménez Cruz',
+    email: 'ventas@desechablessanjuan.com',
+    phone: '427-116-8800',
+    address: 'Av. Juárez Poniente #305, San Juan del Río, Qro.',
+    category: 'Desechables',
+    paymentTerms: 'Crédito 15 días',
+    creditDays: 15,
+    creditLimit: 40000,
+    currentDebt: 0,
+    active: true,
+    rating: 4,
+    notes: 'Proveedor local para abastecimiento rápido de consumibles y papelería.',
+    createdAt: '2026-07-01T09:00:00Z'
+  }
 ];
 
 export const INITIAL_RAW_MATERIALS: RawMaterial[] = [
@@ -78,10 +231,58 @@ export const INITIAL_PRODUCTION_ORDERS: ProductionOrder[] = [
 ];
 
 export const INITIAL_CLIENTS: Client[] = [
-  { id: 'cli-1', name: 'Pastelería "El Maná del Cielo"', rfc: 'PMC180412AA1', email: 'contacto@pasteleriaelmana.com', phone: '477-123-4567', priceList: 'Distribuidor', creditDays: 30, creditLimit: 50000, currentDebt: 15000 },
-  { id: 'cli-2', name: 'Repostera Dulces Creaciones S.A.', rfc: 'RDC200511XX2', email: 'ventas@dulcescreaciones.com', phone: '333-987-6543', priceList: 'Mayoreo', creditDays: 15, creditLimit: 30000, currentDebt: 6500 },
-  { id: 'cli-3', name: 'Gelatinas y Postres Doña Tere', rfc: 'GPD150228BB9', email: 'donatere@gmail.com', phone: '322-555-1234', priceList: 'Público', creditDays: 0, creditLimit: 0, currentDebt: 0 },
-  { id: 'cli-4', name: 'Panificadora El Buen Trigo', rfc: 'PBT120915CC3', email: 'panaderia@buentrigo.com', phone: '818-444-9988', priceList: 'Mayoreo', creditDays: 45, creditLimit: 25000, currentDebt: 24000 },
+  { 
+    id: 'cli-1', 
+    name: 'Pastelería "El Maná del Cielo"', 
+    rfc: 'PMC180412AA1', 
+    email: 'contacto@pasteleriaelmana.com', 
+    phone: '477-123-4567', 
+    whatsapp: '477-123-4567',
+    address: 'Blvd. Adolfo López Mateos #1402, Centro, León, Gto.',
+    priceList: 'Distribuidor', 
+    creditDays: 30, 
+    creditLimit: 50000, 
+    currentDebt: 15000 
+  },
+  { 
+    id: 'cli-2', 
+    name: 'Repostera Dulces Creaciones S.A.', 
+    rfc: 'RDC200511XX2', 
+    email: 'ventas@dulcescreaciones.com', 
+    phone: '333-987-6543', 
+    whatsapp: '333-987-6543',
+    address: 'Av. Vallarta #2850, Col. Arcos Vallarta, Guadalajara, Jal.',
+    priceList: 'Mayoreo', 
+    creditDays: 15, 
+    creditLimit: 30000, 
+    currentDebt: 6500 
+  },
+  { 
+    id: 'cli-3', 
+    name: 'Gelatinas y Postres Doña Tere', 
+    rfc: 'GPD150228BB9', 
+    email: 'donatere@gmail.com', 
+    phone: '322-555-1234', 
+    whatsapp: '322-555-1234',
+    address: 'Calle Francisco I. Madero #88, Col. Centro, Puerto Vallarta, Jal.',
+    priceList: 'Público', 
+    creditDays: 0, 
+    creditLimit: 0, 
+    currentDebt: 0 
+  },
+  { 
+    id: 'cli-4', 
+    name: 'Panificadora El Buen Trigo', 
+    rfc: 'PBT120915CC3', 
+    email: 'panaderia@buentrigo.com', 
+    phone: '818-444-9988', 
+    whatsapp: '818-444-9988',
+    address: 'Av. Gonzalitos #450 Norte, Monterrey, N.L.',
+    priceList: 'Mayoreo', 
+    creditDays: 45, 
+    creditLimit: 25000, 
+    currentDebt: 24000 
+  },
 ];
 
 export const INITIAL_SALES: Sale[] = [
@@ -394,6 +595,14 @@ export class MockDatabase {
     this.set('sale_notes', data);
   }
 
+  static getSuppliers(): Supplier[] {
+    return this.get<Supplier[]>('suppliers', INITIAL_SUPPLIERS);
+  }
+
+  static saveSuppliers(data: Supplier[]) {
+    this.set('suppliers', data);
+  }
+
   static addAuditLog(user: string, action: string, module: string, details: string) {
     const logs = this.getAuditLogs();
     const newLog: AuditLog = {
@@ -405,5 +614,36 @@ export class MockDatabase {
       details
     };
     this.saveAuditLogs([newLog, ...logs]);
+  }
+
+  static addStockMovement(
+    materialId: string, 
+    _materialName: string, 
+    type: 'in' | 'out' | 'adjustment' | 'entrada_compra' | 'salida_produccion' | 'salida_venta' | 'merma' | 'ajuste', 
+    quantity: number, 
+    _unit: string, 
+    notes: string,
+    user: string = 'Admin',
+    lote?: string
+  ) {
+    const current = this.getStockMovements();
+    let moveType: StockMovement['type'] = 'ajuste';
+    if (type === 'in' || type === 'entrada_compra') moveType = 'entrada_compra';
+    else if (type === 'salida_produccion') moveType = 'salida_produccion';
+    else if (type === 'salida_venta' || type === 'out') moveType = 'salida_venta';
+    else if (type === 'merma') moveType = 'merma';
+    else moveType = 'ajuste';
+
+    const newMov: StockMovement = {
+      id: `mov-${Date.now()}`,
+      materialId,
+      type: moveType,
+      quantity,
+      date: new Date().toISOString(),
+      lote,
+      user,
+      notes
+    };
+    this.saveStockMovements([newMov, ...current]);
   }
 }

@@ -5,10 +5,36 @@ export interface User {
   name: string;
   username: string;
   email?: string;
+  phone?: string;
   role: RoleType;
   pin: string;
   active: boolean;
   permissions: string[];
+  avatarUrl?: string;
+  jobTitle?: string;
+  department?: string;
+  bio?: string;
+  createdAt?: string;
+}
+
+export interface Supplier {
+  id: string;
+  name: string; // Nombre del negocio
+  rfc?: string;
+  contactName?: string; // Nombre del representante
+  email?: string; // Correos
+  phone?: string; // Teléfonos
+  whatsapp?: string; // WhatsApp
+  address?: string; // Dirección
+  category?: 'Materia Prima' | 'Químicos' | 'Empaques' | 'Desechables' | 'Utensilios' | 'Servicios' | 'General';
+  paymentTerms?: 'Contado' | 'Crédito 15 días' | 'Crédito 30 días' | 'Crédito 45 días' | 'Crédito 60 días';
+  creditDays?: number;
+  creditLimit?: number;
+  currentDebt?: number;
+  active: boolean;
+  rating?: number; // 1 to 5
+  notes?: string;
+  createdAt?: string;
 }
 
 export interface RawMaterial {
@@ -85,14 +111,17 @@ export interface StockMovement {
 
 export interface Client {
   id: string;
-  name: string;
-  rfc: string;
-  email: string;
-  phone: string;
+  name: string; // Nombre del cliente
+  rfc?: string;
+  email?: string; // Correo
+  phone?: string; // Teléfonos
+  whatsapp?: string; // WhatsApp
+  address?: string; // Dirección
   priceList: 'Público' | 'Mayoreo' | 'Distribuidor';
   creditDays: number;
   creditLimit: number;
   currentDebt: number;
+  createdAt?: string;
 }
 
 export interface OrderItem {

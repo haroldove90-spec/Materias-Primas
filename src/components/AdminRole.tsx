@@ -10,12 +10,18 @@ import { SupabaseModal } from './SupabaseModal';
 import { SUPABASE_PROJECT_INFO, SUPABASE_URL, supabase } from '../lib/supabase';
 import { updateUserRoleInSupabase, fetchUsersFromSupabase } from '../services/supabaseService';
 import { recordSaveTelemetry } from '../services/supabaseTelemetry';
+import { EmployeesManager } from './EmployeesManager';
+import { SuppliersManager } from './SuppliersManager';
+import { ClientsManager } from './ClientsManager';
+import { AdminRawMaterialsManager } from './AdminRawMaterialsManager';
+
+export type AdminTabType = 'analytics' | 'finances' | 'clients' | 'suppliers' | 'raw_materials' | 'employees' | 'config';
 
 interface AdminRoleProps {
   onBack: () => void;
   currentUser: User;
-  activeTab?: 'analytics' | 'finances' | 'config';
-  setActiveTab?: (tab: 'analytics' | 'finances' | 'config') => void;
+  activeTab?: AdminTabType;
+  setActiveTab?: (tab: AdminTabType) => void;
   onNavigateToRole?: (role: RoleType) => void;
 }
 
@@ -29,9 +35,9 @@ export default function AdminRole({ onBack, currentUser, activeTab: propsActiveT
   const [config, setConfig] = useState<SystemConfig | null>(null);
 
   // UI States
-  const [internalActiveTab, setInternalActiveTab] = useState<'analytics' | 'finances' | 'config'>('analytics');
-  const activeTab = propsActiveTab || internalActiveTab;
-  const setActiveTab = propsSetActiveTab || setInternalActiveTab;
+  const [internalActiveTab, setInternalActiveTab] = useState<AdminTabType>('analytics');
+  const activeTab = (propsActiveTab as AdminTabType) || internalActiveTab;
+  const setActiveTab = (propsSetActiveTab as (tab: AdminTabType) => void) || setInternalActiveTab;
   const [chartPeriod, setChartPeriod] = useState<'daily' | 'monthly' | 'yearly'>('daily');
   const [showSupabaseModal, setShowSupabaseModal] = useState(false);
 
@@ -1105,6 +1111,26 @@ export default function AdminRole({ onBack, currentUser, activeTab: propsActiveT
             </div>
 
           </div>
+        )}
+
+        {/* TAB: CLIENTES */}
+        {activeTab === 'clients' && (
+          <ClientsManager currentUser={currentUser} />
+        )}
+
+        {/* TAB: MATERIAS PRIMAS */}
+        {activeTab === 'raw_materials' && (
+          <AdminRawMaterialsManager currentUser={currentUser} />
+        )}
+
+        {/* TAB 4: EMPLEADOS Y ACCESOS */}
+        {activeTab === 'employees' && (
+          <EmployeesManager currentUser={currentUser} />
+        )}
+
+        {/* TAB 5: PROVEEDORES */}
+        {activeTab === 'suppliers' && (
+          <SuppliersManager currentUser={currentUser} />
         )}
 
       </main>

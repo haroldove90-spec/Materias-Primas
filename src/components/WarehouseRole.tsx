@@ -2,17 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { 
   Package, ArrowDownLeft, ArrowUpRight, AlertOctagon, Calendar, 
   Printer, QrCode, Search, RefreshCw, Plus, Trash2, UserCheck, ShieldAlert,
-  ShoppingCart, FileText, CheckCircle, Download, X
+  ShoppingCart, FileText, CheckCircle, Download, X, Truck
 } from 'lucide-react';
 import { MockDatabase } from '../data';
-import { RawMaterial, StockMovement, User, PurchaseOrder } from '../types';
+import { RawMaterial, StockMovement, User, PurchaseOrder, Supplier } from '../types';
 import { exportToExcel, exportToPDF } from '../utils/exportUtils';
+import { SuppliersManager } from './SuppliersManager';
 
 interface WarehouseRoleProps {
   onBack: () => void;
   currentUser: User;
-  activeTab?: 'inventory' | 'traceability' | 'purchasing';
-  setActiveTab?: (tab: 'inventory' | 'traceability' | 'purchasing') => void;
+  activeTab?: 'inventory' | 'traceability' | 'purchasing' | 'suppliers';
+  setActiveTab?: (tab: 'inventory' | 'traceability' | 'purchasing' | 'suppliers') => void;
 }
 
 export default function WarehouseRole({ onBack, currentUser, activeTab: propsActiveTab, setActiveTab: propsSetActiveTab }: WarehouseRoleProps) {
@@ -22,7 +23,7 @@ export default function WarehouseRole({ onBack, currentUser, activeTab: propsAct
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
 
   // UI States
-  const [internalActiveTab, setInternalActiveTab] = useState<'inventory' | 'traceability' | 'purchasing'>('inventory');
+  const [internalActiveTab, setInternalActiveTab] = useState<'inventory' | 'traceability' | 'purchasing' | 'suppliers'>('inventory');
   const activeTab = propsActiveTab || internalActiveTab;
   const setActiveTab = propsSetActiveTab || setInternalActiveTab;
   const [searchTerm, setSearchTerm] = useState('');
@@ -927,6 +928,18 @@ export default function WarehouseRole({ onBack, currentUser, activeTab: propsAct
 
             </div>
           </div>
+        )}
+
+        {/* TAB 4: PROVEEDORES (SUPPLIERS) */}
+        {activeTab === 'suppliers' && (
+          <SuppliersManager 
+            currentUser={currentUser} 
+            onCreatePurchaseOrder={(sup) => {
+              setSelectedSupplier(sup.name);
+              setShowCreatePoModal(true);
+              setActiveTab('purchasing');
+            }}
+          />
         )}
 
       </main>
