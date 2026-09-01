@@ -15,7 +15,19 @@ import {
   INITIAL_SALE_NOTES,
   INITIAL_SUPPLIERS 
 } from '../data';
-import { Supplier, User, Client, RawMaterial } from '../types';
+import { 
+  Supplier, 
+  User, 
+  Client, 
+  RawMaterial, 
+  Formula, 
+  ProductionOrder, 
+  Sale, 
+  PurchaseOrder, 
+  TransferSheet, 
+  SaleNote, 
+  DeliveryRoute 
+} from '../types';
 
 export const SUPABASE_SQL_SCRIPT = `-- ==============================================================================
 -- ERP MATERIAS PRIMAS & INSUMOS DE PANIFICACIÓN / REPOSTERÍA
@@ -1188,6 +1200,398 @@ export async function deleteRawMaterialInSupabase(materialId: string): Promise<{
     return { success: true };
   } catch (e: any) {
     return { success: false, error: e?.message || 'Error al eliminar materia prima' };
+  }
+}
+
+// ==============================================================================
+// FÓRMULAS / RECETAS CRUD & SYNC
+// ==============================================================================
+
+export async function fetchFormulasFromSupabase(): Promise<{ success: boolean; data?: Formula[]; error?: string }> {
+  try {
+    const { data, error } = await supabase
+      .from('formulas')
+      .select('*')
+      .order('name', { ascending: true });
+
+    if (error) throw error;
+
+    const formatted: Formula[] = (data || []).map((f: any) => ({
+      id: f.id,
+      name: f.name,
+      description: f.description || '',
+      batchSizeLiters: Number(f.batch_size_liters || 1000),
+      ingredients: Array.isArray(f.ingredients) ? f.ingredients : [],
+      packaging: Array.isArray(f.packaging) ? f.packaging : [],
+      laborCost: Number(f.labor_cost || 0),
+      otherCost: Number(f.other_cost || 0),
+      active: f.active ?? true
+    }));
+
+    return { success: true, data: formatted };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Error al obtener recetas' };
+  }
+}
+
+export async function saveFormulaToSupabase(formula: Formula): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.from('formulas').upsert({
+      id: formula.id,
+      name: formula.name,
+      description: formula.description,
+      batch_size_liters: formula.batchSizeLiters,
+      ingredients: formula.ingredients,
+      packaging: formula.packaging,
+      labor_cost: formula.laborCost,
+      other_cost: formula.otherCost,
+      created_at: new Date().toISOString()
+    });
+
+    if (error) throw error;
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Error al guardar fórmula' };
+  }
+}
+
+export async function deleteFormulaInSupabase(formulaId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.from('formulas').delete().eq('id', formulaId);
+    if (error) throw error;
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Error al eliminar fórmula' };
+  }
+}
+
+// ==============================================================================
+// ÓRDENES DE PRODUCCIÓN CRUD & SYNC
+// ==============================================================================
+
+export async function fetchProductionOrdersFromSupabase(): Promise<{ success: boolean; data?: ProductionOrder[]; error?: string }> {
+  try {
+    const { data, error } = await supabase
+      .from('production_orders')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const formatted: ProductionOrder[] = (data || []).map((po: any) => ({
+      id: po.id,
+      lote: po.lote || undefined,
+      formulaId: po.formula_id,
+      quantityLiters: Number(po.quantity_liters || 0),
+      status: po.status || 'pending',
+      createdAt: po.created_at || new Date().toISOString(),
+      startedAt: po.started_at || undefined,
+      completedAt: po.completed_at || undefined,
+      preCheckPassed: Boolean(po.pre_check_passed),
+      notes: po.notes || '',
+      operator: po.operator_name || 'Operario',
+      qaCheck: po.qa_check || undefined
+    }));
+
+    return { success: true, data: formatted };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Error al obtener órdenes de producción' };
+  }
+}
+
+export async function saveProductionOrderToSupabase(order: ProductionOrder): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.from('production_orders').upsert({
+      id: order.id,
+      lote: order.lote || null,
+      formula_id: order.formulaId,
+      quantity_liters: order.quantityLiters,
+      status: order.status,
+      created_at: order.createdAt || new Date().toISOString(),
+      started_at: order.startedAt || null,
+      completed_at: order.completedAt || null,
+      pre_check_passed: order.preCheckPassed,
+      operator_name: order.operator,
+      qa_check: order.qaCheck || null,
+      notes: order.notes || null
+    });
+
+    if (error) throw error;
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Error al guardar orden de producción' };
+  }
+}
+
+export async function deleteProductionOrderInSupabase(orderId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.from('production_orders').delete().eq('id', orderId);
+    if (error) throw error;
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Error al eliminar orden de producción' };
+  }
+}
+
+// ==============================================================================
+// VENTAS Y PEDIDOS CRUD & SYNC
+// ==============================================================================
+
+export async function fetchSalesFromSupabase(): Promise<{ success: boolean; data?: Sale[]; error?: string }> {
+  try {
+    const { data, error } = await supabase
+      .from('sales')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const formatted: Sale[] = (data || []).map((s: any) => ({
+      id: s.id,
+      clientId: s.client_id,
+      clientName: s.client_name,
+      items: Array.isArray(s.items) ? s.items : [],
+      subtotal: Number(s.subtotal || 0),
+      tax: Number(s.tax || 0),
+      total: Number(s.total || 0),
+      paymentType: s.payment_type || 'Contado',
+      status: s.status || 'Cotización',
+      billingType: s.billing_type || 'Remisión',
+      cfdiStatus: s.cfdi_status || undefined,
+      createdAt: s.created_at || new Date().toISOString(),
+      creditDaysLeft: s.credit_days_left,
+      amountPaid: Number(s.amount_paid || 0),
+      notes: s.notes || undefined
+    }));
+
+    return { success: true, data: formatted };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Error al obtener ventas' };
+  }
+}
+
+export async function saveSaleToSupabase(sale: Sale): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.from('sales').upsert({
+      id: sale.id,
+      client_id: sale.clientId,
+      client_name: sale.clientName,
+      items: sale.items,
+      subtotal: sale.subtotal,
+      tax: sale.tax,
+      total: sale.total,
+      payment_type: sale.paymentType,
+      status: sale.status,
+      billing_type: sale.billingType,
+      cfdi_status: sale.cfdiStatus || null,
+      created_at: sale.createdAt || new Date().toISOString(),
+      credit_days_left: sale.creditDaysLeft || 0,
+      amount_paid: sale.amountPaid || 0
+    });
+
+    if (error) throw error;
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Error al guardar venta' };
+  }
+}
+
+export async function deleteSaleInSupabase(saleId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.from('sales').delete().eq('id', saleId);
+    if (error) throw error;
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Error al eliminar venta' };
+  }
+}
+
+// ==============================================================================
+// ÓRDENES DE COMPRA (PURCHASE ORDERS) CRUD & SYNC
+// ==============================================================================
+
+export async function fetchPurchaseOrdersFromSupabase(): Promise<{ success: boolean; data?: PurchaseOrder[]; error?: string }> {
+  try {
+    const { data, error } = await supabase
+      .from('purchase_orders')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const formatted: PurchaseOrder[] = (data || []).map((po: any) => ({
+      id: po.id,
+      supplierName: po.supplier_name,
+      items: Array.isArray(po.items) ? po.items : [],
+      subtotal: Number(po.subtotal || 0),
+      tax: Number(po.tax || 0),
+      total: Number(po.total || 0),
+      status: po.status || 'draft',
+      createdAt: po.created_at || new Date().toISOString(),
+      receivedAt: po.received_at || undefined,
+      invoiceNumber: po.invoice_number || undefined
+    }));
+
+    return { success: true, data: formatted };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Error al obtener órdenes de compra' };
+  }
+}
+
+export async function savePurchaseOrderToSupabase(po: PurchaseOrder): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.from('purchase_orders').upsert({
+      id: po.id,
+      supplier_name: po.supplierName,
+      items: po.items,
+      subtotal: po.subtotal,
+      tax: po.tax,
+      total: po.total,
+      status: po.status,
+      created_at: po.createdAt || new Date().toISOString(),
+      received_at: po.receivedAt || null,
+      invoice_number: po.invoiceNumber || null
+    });
+
+    if (error) throw error;
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Error al guardar orden de compra' };
+  }
+}
+
+export async function deletePurchaseOrderInSupabase(poId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.from('purchase_orders').delete().eq('id', poId);
+    if (error) throw error;
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Error al eliminar orden de compra' };
+  }
+}
+
+// ==============================================================================
+// HOJAS DE TRASLADO (TRANSFER SHEETS) CRUD & SYNC
+// ==============================================================================
+
+export async function saveTransferSheetToSupabase(ts: TransferSheet): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.from('transfer_sheets').upsert({
+      id: ts.id,
+      folio: ts.folio,
+      date: ts.date,
+      expedited_in: ts.expeditedIn,
+      elaborated_by: ts.elaboratedBy,
+      client_name: ts.clientName,
+      destination: ts.destination,
+      address: ts.address || null,
+      cp: ts.cp || null,
+      colonia: ts.colonia || null,
+      fiscal_regimen: ts.fiscalRegimen || null,
+      phone: ts.phone || null,
+      client_no: ts.clientNo || null,
+      rfc: ts.rfc || null,
+      curp: ts.curp || null,
+      payment_form: ts.paymentForm || null,
+      operator: ts.operator || null,
+      plate_no: ts.plateNo || null,
+      items: ts.items,
+      subtotal: ts.subtotal,
+      tax: ts.tax,
+      total: ts.total,
+      notes: ts.notes || null,
+      created_at: ts.createdAt || new Date().toISOString()
+    });
+
+    if (error) throw error;
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Error al guardar hoja de traslado' };
+  }
+}
+
+export async function deleteTransferSheetInSupabase(tsId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.from('transfer_sheets').delete().eq('id', tsId);
+    if (error) throw error;
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Error al eliminar hoja de traslado' };
+  }
+}
+
+// ==============================================================================
+// NOTAS DE VENTA (SALE NOTES) CRUD & SYNC
+// ==============================================================================
+
+export async function saveSaleNoteToSupabase(sn: SaleNote): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.from('sale_notes').upsert({
+      id: sn.id,
+      note_no: sn.noteNo,
+      date: sn.date,
+      client_name: sn.clientName,
+      phone: sn.phone || null,
+      city: sn.city || null,
+      items: sn.items,
+      subtotal: sn.subtotal,
+      tax: sn.tax,
+      total: sn.total,
+      created_at: sn.createdAt || new Date().toISOString()
+    });
+
+    if (error) throw error;
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Error al guardar nota de venta' };
+  }
+}
+
+export async function deleteSaleNoteInSupabase(snId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.from('sale_notes').delete().eq('id', snId);
+    if (error) throw error;
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Error al eliminar nota de venta' };
+  }
+}
+
+// ==============================================================================
+// RUTAS DE ENTREGA (DELIVERY ROUTES) CRUD & SYNC
+// ==============================================================================
+
+export async function saveDeliveryRouteToSupabase(route: DeliveryRoute): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.from('delivery_routes').upsert({
+      id: route.id,
+      sale_id: route.saleId,
+      client_name: route.clientName,
+      address: route.address,
+      status: route.status,
+      delivered_at: route.deliveredAt || null,
+      evidence_signature: route.evidenceSignature || null,
+      evidence_photo: route.evidencePhoto || null,
+      payment_collected: route.paymentCollected || 0,
+      payment_method: route.paymentMethod || null,
+      items_summary: route.itemsSummary,
+      created_at: new Date().toISOString()
+    });
+
+    if (error) throw error;
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Error al guardar ruta de entrega' };
+  }
+}
+
+export async function deleteDeliveryRouteInSupabase(routeId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.from('delivery_routes').delete().eq('id', routeId);
+    if (error) throw error;
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Error al eliminar ruta de entrega' };
   }
 }
 

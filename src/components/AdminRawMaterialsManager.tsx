@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   Package, Plus, Search, Filter, AlertTriangle, ArrowUpDown, 
   Download, FileText, RefreshCw, Check, X, Edit, Trash2, 
-  Layers, DollarSign, Calendar, Tag, PlusCircle, MinusCircle, CheckCircle2
+  Layers, DollarSign, Calendar, Tag, PlusCircle, MinusCircle, CheckCircle2,
+  Eye, XCircle
 } from 'lucide-react';
 import { RawMaterial, User } from '../types';
 import { MockDatabase } from '../data';
@@ -21,6 +22,7 @@ export const AdminRawMaterialsManager: React.FC<AdminRawMaterialsManagerProps> =
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [stockStatusFilter, setStockStatusFilter] = useState<'all' | 'low' | 'ok' | 'out'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [unitFilter, setUnitFilter] = useState<string>('all');
   const [isSyncing, setIsSyncing] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -28,6 +30,7 @@ export const AdminRawMaterialsManager: React.FC<AdminRawMaterialsManagerProps> =
   // Modal State for New/Edit Material
   const [showModal, setShowModal] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState<RawMaterial | null>(null);
+  const [viewingMaterial, setViewingMaterial] = useState<RawMaterial | null>(null);
 
   // Form State
   const [name, setName] = useState('');
@@ -38,6 +41,8 @@ export const AdminRawMaterialsManager: React.FC<AdminRawMaterialsManagerProps> =
   const [costPerUnit, setCostPerUnit] = useState<number>(0);
   const [loteProveedor, setLoteProveedor] = useState('');
   const [expiryDate, setExpiryDate] = useState('');
+  const [notes, setNotes] = useState('');
+  const [active, setActive] = useState(true);
 
   // Quick Adjustment Modal State
   const [showAdjustModal, setShowAdjustModal] = useState(false);
@@ -101,6 +106,8 @@ export const AdminRawMaterialsManager: React.FC<AdminRawMaterialsManagerProps> =
     setCostPerUnit(0);
     setLoteProveedor('');
     setExpiryDate('');
+    setNotes('');
+    setActive(true);
     setShowModal(true);
   };
 
@@ -114,7 +121,38 @@ export const AdminRawMaterialsManager: React.FC<AdminRawMaterialsManagerProps> =
     setCostPerUnit(m.costPerUnit);
     setLoteProveedor(m.loteProveedor || '');
     setExpiryDate(m.expiryDate || '');
+    setNotes(m.notes || '');
+    setActive(m.active ?? true);
     setShowModal(true);
+  };
+
+  const handleToggleActive = async (m: RawMaterial) => {
+    const nextStatus = !(m.active ?? true);
+    const updatedMat: RawMaterial = { ...m, active: nextStatus };
+    const currentList = MockDatabase.getRawMaterials();
+    const updatedList = currentList.map(item => item.id === m.id ? updatedMat : item);
+    MockDatabase.saveRawMaterials(updatedList);
+    setMaterials(updatedList);
+
+    MockDatabase.addAuditLog(
+      currentUser.name,
+      nextStatus ? 'Activó materia prima' : 'Desactivó materia prima',
+      'Inventario',
+      `${m.name} (${m.sku}) ahora está ${nextStatus ? 'Activo' : 'Inactivo'}`
+    );
+
+    setFeedback({
+      type: 'success',
+      text: `Materia prima "${m.name}" ${nextStatus ? 'activada' : 'desactivada'} correctamente.`
+    });
+
+    try {
+      await saveRawMaterialToSupabase(updatedMat);
+    } catch (e) {
+      console.warn('Supabase sync raw material error:', e);
+    }
+
+    setTimeout(() => setFeedback(null), 3000);
   };
 
   const handleSaveMaterial = async (e: React.FormEvent) => {
@@ -133,7 +171,9 @@ export const AdminRawMaterialsManager: React.FC<AdminRawMaterialsManagerProps> =
       minStock: Number(minStock) || 0,
       costPerUnit: Number(costPerUnit) || 0,
       loteProveedor: loteProveedor.trim() || undefined,
-      expiryDate: expiryDate || undefined
+      expiryDate: expiryDate || undefined,
+      notes: notes.trim() || undefined,
+      active
     };
 
     const currentList = MockDatabase.getRawMaterials();
@@ -150,11 +190,11 @@ export const AdminRawMaterialsManager: React.FC<AdminRawMaterialsManagerProps> =
       currentUser.name,
       editingMaterial ? 'Actualizó materia prima' : 'Registró nueva materia prima',
       'Inventario',
-      `${newMat.name} (${newMat.sku}) - Stock: ${newMat.stock} ${newMat.unit}`
+      `${newMat.name} (${newMat.sku}) - Stock: ${newMat.stock} ${newMat.unit} - Estado: ${newMat.active ? 'Activo' : 'Inactivo'}`
     );
 
     setShowModal(false);
-    setFeedback({ type: 'success', text: `Materia prima ${editingMaterial ? 'actualizada' : 'registrada'} correctamente.` });
+    setFeedback({ type: 'success', text: `Materia prima "${newMat.name}" guardada correctamente.` });
 
     // Sync to Supabase
     try {
@@ -296,12 +336,17 @@ export const AdminRawMaterialsManager: React.FC<AdminRawMaterialsManagerProps> =
 
     const matchesUnit = unitFilter === 'all' || m.unit === unitFilter;
     
+    const matchesStatus = 
+      statusFilter === 'all' || 
+      (statusFilter === 'active' && (m.active ?? true)) || 
+      (statusFilter === 'inactive' && m.active === false);
+
     let matchesStock = true;
     if (stockStatusFilter === 'out') matchesStock = m.stock <= 0;
     else if (stockStatusFilter === 'low') matchesStock = m.stock > 0 && m.stock <= m.minStock;
     else if (stockStatusFilter === 'ok') matchesStock = m.stock > m.minStock;
 
-    return matchesSearch && matchesUnit && matchesStock;
+    return matchesSearch && matchesUnit && matchesStatus && matchesStock;
   });
 
   const totalInventoryValue = materials.reduce((acc, m) => acc + (m.stock * m.costPerUnit), 0);
@@ -432,11 +477,21 @@ export const AdminRawMaterialsManager: React.FC<AdminRawMaterialsManagerProps> =
 
         <div className="flex flex-wrap items-center gap-2">
           <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as any)}
+            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+          >
+            <option value="all">Todos los Estados</option>
+            <option value="active">Activos en Producción</option>
+            <option value="inactive">Inactivos / Desactivados</option>
+          </select>
+
+          <select
             value={stockStatusFilter}
             onChange={(e) => setStockStatusFilter(e.target.value as any)}
             className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-amber-500/20"
           >
-            <option value="all">Todos los Estados</option>
+            <option value="all">Todos los Niveles</option>
             <option value="low">Stock Bajo / Crítico</option>
             <option value="out">Agotados (Stock 0)</option>
             <option value="ok">Stock Óptimo</option>
@@ -467,19 +522,20 @@ export const AdminRawMaterialsManager: React.FC<AdminRawMaterialsManagerProps> =
                 <th className="py-3.5 px-4 text-right">Stock Mínimo</th>
                 <th className="py-3.5 px-4 text-right">Costo Unit.</th>
                 <th className="py-3.5 px-4 text-right">Valor Total</th>
-                <th className="py-3.5 px-4 text-center">Estado</th>
-                <th className="py-3.5 px-4 text-center">Lote / Caducidad</th>
+                <th className="py-3.5 px-4 text-center">Estado Stock</th>
+                <th className="py-3.5 px-4 text-center">Estatus</th>
                 <th className="py-3.5 px-4 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
               {filteredMaterials.map((m) => {
+                const isActive = m.active ?? true;
                 const isOut = m.stock <= 0;
                 const isLow = m.stock > 0 && m.stock <= m.minStock;
                 const totalVal = m.stock * m.costPerUnit;
 
                 return (
-                  <tr key={m.id} className="hover:bg-slate-50/60 transition-colors">
+                  <tr key={m.id} className={`hover:bg-slate-50/60 transition-colors ${!isActive ? 'bg-slate-50/40 opacity-75' : ''}`}>
                     <td className="py-3.5 px-4">
                       <div className="flex items-center gap-3">
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 font-bold ${
@@ -520,40 +576,45 @@ export const AdminRawMaterialsManager: React.FC<AdminRawMaterialsManagerProps> =
 
                     <td className="py-3.5 px-4 text-center">
                       {isOut ? (
-                        <span className="px-2.5 py-1 rounded-full bg-rose-100 text-rose-700 font-bold text-[11px] border border-rose-200">
+                        <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 font-bold text-[10px] border border-rose-200">
                           Agotado
                         </span>
                       ) : isLow ? (
-                        <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 font-bold text-[11px] border border-amber-200">
+                        <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-bold text-[10px] border border-amber-200">
                           Bajo Stock
                         </span>
                       ) : (
-                        <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 font-bold text-[11px] border border-emerald-200">
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold text-[10px] border border-emerald-200">
                           Óptimo
                         </span>
                       )}
                     </td>
 
-                    <td className="py-3.5 px-4 text-center text-[11px] text-slate-500">
-                      {m.loteProveedor ? (
-                        <div>
-                          <span className="font-mono font-semibold text-slate-700 block">{m.loteProveedor}</span>
-                          {m.expiryDate && <span className="text-slate-400">{m.expiryDate}</span>}
-                        </div>
-                      ) : (
-                        <span className="text-slate-400">-</span>
-                      )}
+                    <td className="py-3.5 px-4 text-center">
+                      <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] border ${
+                        isActive ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-200 text-slate-600 border-slate-300'
+                      }`}>
+                        {isActive ? 'Activo' : 'Inactivo'}
+                      </span>
                     </td>
 
                     <td className="py-3.5 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => setViewingMaterial(m)}
+                          className="p-1 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+                          title="Ver detalle de materia prima"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+
                         <button
                           onClick={() => handleOpenAdjust(m)}
-                          className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-[11px] font-bold inline-flex items-center gap-1 transition-colors"
+                          className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-[11px] font-bold inline-flex items-center gap-1 transition-colors"
                           title="Ajustar stock rápido"
                         >
-                          <ArrowUpDown className="w-3.5 h-3.5" />
-                          <span>Ajustar</span>
+                          <ArrowUpDown className="w-3 h-3" />
+                          <span>Ajuste</span>
                         </button>
 
                         <button
@@ -562,6 +623,16 @@ export const AdminRawMaterialsManager: React.FC<AdminRawMaterialsManagerProps> =
                           title="Editar materia prima"
                         >
                           <Edit className="w-4 h-4" />
+                        </button>
+
+                        <button
+                          onClick={() => handleToggleActive(m)}
+                          className={`p-1 rounded-lg transition-colors ${
+                            isActive ? 'text-amber-600 hover:bg-amber-50' : 'text-emerald-600 hover:bg-emerald-50'
+                          }`}
+                          title={isActive ? 'Desactivar insumo' : 'Activar insumo'}
+                        >
+                          {isActive ? <XCircle className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
                         </button>
 
                         <button
@@ -597,6 +668,95 @@ export const AdminRawMaterialsManager: React.FC<AdminRawMaterialsManagerProps> =
           </div>
         )}
       </div>
+
+      {/* MODAL VER DETALLE DE MATERIA PRIMA */}
+      {viewingMaterial && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold">
+                  <Package className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800">{viewingMaterial.name}</h3>
+                  <span className="text-xs font-mono text-slate-500">SKU: {viewingMaterial.sku}</span>
+                </div>
+              </div>
+              <button 
+                onClick={() => setViewingMaterial(null)}
+                className="p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 text-xs text-slate-700">
+              <div className="grid grid-cols-2 gap-3 bg-slate-50 p-4 rounded-xl">
+                <div>
+                  <p className="text-slate-400 font-medium">Stock en Almacén</p>
+                  <p className="text-base font-bold text-slate-800 font-mono">{viewingMaterial.stock} {viewingMaterial.unit}</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 font-medium">Stock Mínimo</p>
+                  <p className="font-semibold text-slate-800 font-mono">{viewingMaterial.minStock} {viewingMaterial.unit}</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 font-medium">Costo por {viewingMaterial.unit}</p>
+                  <p className="font-bold text-emerald-700 text-sm font-mono">${viewingMaterial.costPerUnit.toFixed(2)} MXN</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 font-medium">Valor Total en Stock</p>
+                  <p className="font-bold text-emerald-700 text-sm font-mono">${(viewingMaterial.stock * viewingMaterial.costPerUnit).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MXN</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 font-medium">Lote Proveedor</p>
+                  <p className="font-mono font-semibold text-slate-800">{viewingMaterial.loteProveedor || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 font-medium">Caducidad</p>
+                  <p className="font-semibold text-slate-800">{viewingMaterial.expiryDate || 'No especificada'}</p>
+                </div>
+                <div className="col-span-2 pt-2 border-t border-slate-200 flex justify-between items-center">
+                  <span className="text-slate-500 font-medium">Estado en Producción:</span>
+                  <span className={`px-2 py-0.5 rounded-full font-bold text-[11px] border ${
+                    (viewingMaterial.active ?? true) ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-200 text-slate-600 border-slate-300'
+                  }`}>
+                    {(viewingMaterial.active ?? true) ? 'Insumo Activo' : 'Insumo Inactivo / Desactivado'}
+                  </span>
+                </div>
+              </div>
+
+              {viewingMaterial.notes && (
+                <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-amber-800">
+                  <span className="font-bold block mb-0.5">Notas y Especificaciones:</span>
+                  <p>{viewingMaterial.notes}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <button
+                onClick={() => {
+                  const m = viewingMaterial;
+                  setViewingMaterial(null);
+                  handleOpenEdit(m);
+                }}
+                className="px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold flex items-center gap-1.5 transition-colors text-xs"
+              >
+                <Edit className="w-4 h-4" />
+                <span>Editar este Insumo</span>
+              </button>
+              <button
+                onClick={() => setViewingMaterial(null)}
+                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl font-semibold transition-colors text-xs"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL NUEVA / EDITAR MATERIA PRIMA */}
       {showModal && (
@@ -638,6 +798,23 @@ export const AdminRawMaterialsManager: React.FC<AdminRawMaterialsManagerProps> =
                     placeholder="Ej. Harina de Trigo Extra Fina (Bolsa 50kg)"
                     className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 font-medium text-slate-800"
                   />
+                </div>
+
+                {/* Estatus Activo / Inactivo */}
+                <div className="md:col-span-2 flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <div>
+                    <p className="text-xs font-bold text-slate-800">Estatus en el Catálogo de Producción</p>
+                    <p className="text-[11px] text-slate-500">Los insumos inactivos no aparecerán en nuevas órdenes</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActive(!active)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                      active ? 'bg-emerald-600 text-white' : 'bg-slate-300 text-slate-700'
+                    }`}
+                  >
+                    {active ? '✓ Insumo Activo' : '✕ Desactivado / Inactivo'}
+                  </button>
                 </div>
 
                 {/* SKU */}
@@ -720,12 +897,24 @@ export const AdminRawMaterialsManager: React.FC<AdminRawMaterialsManagerProps> =
                 </div>
 
                 {/* Fecha Caducidad */}
-                <div className="md:col-span-2">
+                <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">Fecha de Caducidad / Vencimiento</label>
                   <input 
                     type="date"
                     value={expiryDate}
                     onChange={(e) => setExpiryDate(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                  />
+                </div>
+
+                {/* Notas / Observaciones */}
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Notas / Especificaciones Técnicas</label>
+                  <textarea 
+                    rows={2}
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Condiciones de almacenamiento, humedad, temperatura, etc."
                     className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
                   />
                 </div>

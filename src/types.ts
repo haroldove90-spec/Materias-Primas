@@ -14,6 +14,7 @@ export interface User {
   jobTitle?: string;
   department?: string;
   bio?: string;
+  notes?: string;
   createdAt?: string;
 }
 
@@ -47,6 +48,8 @@ export interface RawMaterial {
   costPerUnit: number;
   loteProveedor?: string;
   expiryDate?: string;
+  active?: boolean;
+  notes?: string;
 }
 
 export interface FormulaIngredient {
@@ -70,16 +73,22 @@ export interface Formula {
   packaging: PackagingAssociation[];
   laborCost: number;
   otherCost: number;
+  active?: boolean;
 }
 
 export interface QualityCheck {
+  id?: string;
   pH?: number; // e.g., 6.8
   density?: number; // e.g., 1.05
-  sensoryCheck: boolean; // taste, odor, appearance
-  sealingCheck: boolean; // packaging sealed properly
+  sensoryCheck?: boolean; // taste, odor, appearance
+  sensoryPassed?: boolean;
+  sealingCheck?: boolean; // packaging sealed properly
+  sealingPassed?: boolean;
   passed: boolean;
   checkedBy?: string;
   checkedAt?: string;
+  date?: string;
+  notes?: string;
 }
 
 export interface ProductionOrder {
@@ -87,14 +96,16 @@ export interface ProductionOrder {
   lote?: string; // generated upon closure
   formulaId: string;
   quantityLiters: number;
-  status: 'pending' | 'in_progress' | 'completed';
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
   createdAt: string;
   startedAt?: string;
   completedAt?: string;
   preCheckPassed: boolean;
   notes?: string;
   operator: string;
+  assignedTo?: string;
   qaCheck?: QualityCheck;
+  active?: boolean;
 }
 
 export interface StockMovement {
@@ -121,6 +132,8 @@ export interface Client {
   creditDays: number;
   creditLimit: number;
   currentDebt: number;
+  active?: boolean;
+  notes?: string;
   createdAt?: string;
 }
 
@@ -148,6 +161,8 @@ export interface Sale {
   createdAt: string;
   creditDaysLeft?: number;
   amountPaid: number;
+  notes?: string;
+  active?: boolean;
 }
 
 export interface DeliveryRoute {
@@ -155,13 +170,16 @@ export interface DeliveryRoute {
   saleId: string;
   clientName: string;
   address: string;
-  status: 'pendiente' | 'en_ruta' | 'entregado';
+  phone?: string;
+  status: 'pendiente' | 'en_ruta' | 'entregado' | 'cancelado';
   deliveredAt?: string;
   evidenceSignature?: string; // base64 or digital sign marker
   evidencePhoto?: string; // placeholder image path
   paymentCollected?: number;
   paymentMethod?: string;
   itemsSummary: string;
+  notes?: string;
+  active?: boolean;
 }
 
 export interface AuditLog {
@@ -213,6 +231,7 @@ export interface TransferSheet {
   total: number;
   notes?: string;
   createdAt: string;
+  active?: boolean;
 }
 
 export interface SaleNoteItem {
@@ -234,6 +253,8 @@ export interface SaleNote {
   tax: number;
   total: number;
   createdAt: string;
+  active?: boolean;
+  notes?: string;
 }
 
 export interface PurchaseOrderItem {
@@ -251,8 +272,10 @@ export interface PurchaseOrder {
   subtotal: number;
   tax: number;
   total: number;
-  status: 'draft' | 'ordered' | 'received';
+  status: 'draft' | 'ordered' | 'received' | 'cancelled';
   createdAt: string;
   receivedAt?: string;
   invoiceNumber?: string;
+  notes?: string;
+  active?: boolean;
 }

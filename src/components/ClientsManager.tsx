@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Users, UserPlus, Search, Filter, Phone, Mail, MapPin, 
   CreditCard, Edit, Trash2, CheckCircle2, XCircle, 
-  FileText, Download, RefreshCw, AlertCircle, Building, Check, X, MessageSquare, DollarSign, Wallet
+  FileText, Download, RefreshCw, AlertCircle, Building, Check, X, MessageSquare, DollarSign, Wallet, Eye
 } from 'lucide-react';
 import { Client, User } from '../types';
 import { MockDatabase } from '../data';
@@ -21,6 +21,7 @@ export const ClientsManager: React.FC<ClientsManagerProps> = ({ currentUser }) =
   const [clients, setClients] = useState<Client[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [priceListFilter, setPriceListFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [debtFilter, setDebtFilter] = useState<'all' | 'with_debt' | 'no_debt'>('all');
   const [isSyncing, setIsSyncing] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -28,6 +29,7 @@ export const ClientsManager: React.FC<ClientsManagerProps> = ({ currentUser }) =
   // Modal State for New/Edit
   const [showModal, setShowModal] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [viewingClient, setViewingClient] = useState<Client | null>(null);
 
   // Form State
   const [name, setName] = useState('');
@@ -39,6 +41,8 @@ export const ClientsManager: React.FC<ClientsManagerProps> = ({ currentUser }) =
   const [priceList, setPriceList] = useState<Client['priceList']>('Público');
   const [creditDays, setCreditDays] = useState(0);
   const [creditLimit, setCreditLimit] = useState(0);
+  const [notes, setNotes] = useState('');
+  const [active, setActive] = useState(true);
 
   const loadClients = async () => {
     // 1. Local state
@@ -96,6 +100,8 @@ export const ClientsManager: React.FC<ClientsManagerProps> = ({ currentUser }) =
     setPriceList('Público');
     setCreditDays(0);
     setCreditLimit(0);
+    setNotes('');
+    setActive(true);
     setShowModal(true);
   };
 
@@ -110,7 +116,38 @@ export const ClientsManager: React.FC<ClientsManagerProps> = ({ currentUser }) =
     setPriceList(c.priceList || 'Público');
     setCreditDays(c.creditDays || 0);
     setCreditLimit(c.creditLimit || 0);
+    setNotes(c.notes || '');
+    setActive(c.active ?? true);
     setShowModal(true);
+  };
+
+  const handleToggleActive = async (c: Client) => {
+    const nextStatus = !(c.active ?? true);
+    const updatedClient: Client = { ...c, active: nextStatus };
+    const currentList = MockDatabase.getClients();
+    const updatedList = currentList.map(item => item.id === c.id ? updatedClient : item);
+    MockDatabase.saveClients(updatedList);
+    setClients(updatedList);
+
+    MockDatabase.addAuditLog(
+      currentUser.name,
+      nextStatus ? 'Activó cliente' : 'Desactivó cliente',
+      'Clientes',
+      `${c.name} ahora está ${nextStatus ? 'Activo' : 'Inactivo'}`
+    );
+
+    setFeedback({
+      type: 'success',
+      text: `Cliente "${c.name}" ${nextStatus ? 'activado' : 'desactivado'} correctamente.`
+    });
+
+    try {
+      await saveClientToSupabase(updatedClient);
+    } catch (e) {
+      console.warn('Supabase sync client error:', e);
+    }
+
+    setTimeout(() => setFeedback(null), 3000);
   };
 
   const handleSaveClient = async (e: React.FormEvent) => {
@@ -132,6 +169,8 @@ export const ClientsManager: React.FC<ClientsManagerProps> = ({ currentUser }) =
       creditDays: Number(creditDays) || 0,
       creditLimit: Number(creditLimit) || 0,
       currentDebt: editingClient?.currentDebt || 0,
+      notes: notes.trim(),
+      active,
       createdAt: editingClient?.createdAt || new Date().toISOString()
     };
 
@@ -150,11 +189,11 @@ export const ClientsManager: React.FC<ClientsManagerProps> = ({ currentUser }) =
       currentUser.name,
       editingClient ? 'Actualizó cliente' : 'Registró nuevo cliente',
       'Clientes',
-      `${newClient.name} (${newClient.priceList})`
+      `${newClient.name} (${newClient.priceList}) - Estado: ${newClient.active ? 'Activo' : 'Inactivo'}`
     );
 
     setShowModal(false);
-    setFeedback({ type: 'success', text: `Cliente ${editingClient ? 'actualizado' : 'registrado'} correctamente.` });
+    setFeedback({ type: 'success', text: `Cliente "${newClient.name}" guardado correctamente.` });
 
     // Sync to Supabase Cloud
     try {
@@ -251,12 +290,16 @@ Estamos a sus órdenes. ✨`;
       (c.address && c.address.toLowerCase().includes(searchTerm.toLowerCase()));
 
     const matchesPriceList = priceListFilter === 'all' || c.priceList === priceListFilter;
+    const matchesStatus = 
+      statusFilter === 'all' || 
+      (statusFilter === 'active' && (c.active ?? true)) || 
+      (statusFilter === 'inactive' && c.active === false);
     const matchesDebt = 
       debtFilter === 'all' || 
       (debtFilter === 'with_debt' && (c.currentDebt || 0) > 0) || 
       (debtFilter === 'no_debt' && (c.currentDebt || 0) <= 0);
 
-    return matchesSearch && matchesPriceList && matchesDebt;
+    return matchesSearch && matchesPriceList && matchesStatus && matchesDebt;
   });
 
   const totalDebt = clients.reduce((acc, c) => acc + (c.currentDebt || 0), 0);
@@ -376,6 +419,16 @@ Estamos a sus órdenes. ✨`;
 
         <div className="flex flex-wrap items-center gap-2">
           <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as any)}
+            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+          >
+            <option value="all">Todos los Estados</option>
+            <option value="active">Activos</option>
+            <option value="inactive">Inactivos / Desactivados</option>
+          </select>
+
+          <select
             value={priceListFilter}
             onChange={(e) => setPriceListFilter(e.target.value)}
             className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20"
@@ -400,115 +453,145 @@ Estamos a sus órdenes. ✨`;
 
       {/* Clients Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredClients.map((c) => (
-          <div 
-            key={c.id} 
-            className="bg-white rounded-2xl border border-slate-200/80 hover:border-blue-300 p-5 flex flex-col justify-between transition-all duration-200 hover:shadow-md"
-          >
-            <div>
-              {/* Header */}
-              <div className="flex items-start justify-between gap-2 mb-3">
-                <div>
-                  <h3 className="text-base font-bold text-slate-800 leading-tight">{c.name}</h3>
-                  {c.rfc && (
-                    <span className="text-[11px] font-mono text-slate-400 mt-0.5 block">RFC: {c.rfc}</span>
+        {filteredClients.map((c) => {
+          const isActive = c.active ?? true;
+          return (
+            <div 
+              key={c.id} 
+              className={`bg-white rounded-2xl border ${isActive ? 'border-slate-200/80 hover:border-blue-300' : 'border-slate-200 bg-slate-50/50 opacity-80'} p-5 flex flex-col justify-between transition-all duration-200 hover:shadow-md`}
+            >
+              <div>
+                {/* Header */}
+                <div className="flex items-start justify-between gap-2 mb-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-bold text-slate-800 leading-tight">{c.name}</h3>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                        isActive ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-200 text-slate-600 border-slate-300'
+                      }`}>
+                        {isActive ? 'Activo' : 'Inactivo'}
+                      </span>
+                    </div>
+                    {c.rfc && (
+                      <span className="text-[11px] font-mono text-slate-400 mt-0.5 block">RFC: {c.rfc}</span>
+                    )}
+                  </div>
+                  <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
+                    c.priceList === 'Distribuidor' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                    c.priceList === 'Mayoreo' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                    'bg-slate-100 text-slate-700 border-slate-200'
+                  }`}>
+                    {c.priceList}
+                  </span>
+                </div>
+
+                {/* Contact and Info Details */}
+                <div className="space-y-2 text-xs text-slate-600 mb-4 border-t border-b border-slate-100 py-3">
+                  {c.address && (
+                    <div className="flex items-start gap-2">
+                      <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                      <span className="line-clamp-2 text-slate-500" title={c.address}>{c.address}</span>
+                    </div>
+                  )}
+                  {c.phone && (
+                    <div className="flex items-center gap-2">
+                      <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <a href={`tel:${c.phone}`} className="hover:text-blue-600 transition-colors">{c.phone}</a>
+                    </div>
+                  )}
+                  {c.whatsapp && (
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <MessageSquare className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span className="font-medium text-emerald-700">{c.whatsapp}</span>
+                      </div>
+                      <button
+                        onClick={() => handleSendWhatsAppMessage(c)}
+                        className="px-2 py-0.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded text-[11px] font-bold inline-flex items-center gap-1 transition-colors"
+                        title="Enviar mensaje por WhatsApp"
+                      >
+                        <span>WhatsApp</span>
+                      </button>
+                    </div>
+                  )}
+                  {c.email && (
+                    <div className="flex items-center gap-2">
+                      <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <a href={`mailto:${c.email}`} className="truncate hover:text-blue-600 transition-colors">{c.email}</a>
+                    </div>
                   )}
                 </div>
-                <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
-                  c.priceList === 'Distribuidor' ? 'bg-purple-50 text-purple-700 border-purple-200' :
-                  c.priceList === 'Mayoreo' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                  'bg-slate-100 text-slate-700 border-slate-200'
-                }`}>
-                  {c.priceList}
-                </span>
-              </div>
 
-              {/* Contact and Info Details */}
-              <div className="space-y-2 text-xs text-slate-600 mb-4 border-t border-b border-slate-100 py-3">
-                {c.address && (
-                  <div className="flex items-start gap-2">
-                    <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
-                    <span className="line-clamp-2 text-slate-500" title={c.address}>{c.address}</span>
+                {/* Credit Terms & Balance */}
+                <div className="bg-slate-50 rounded-xl p-3 mb-4 space-y-1 text-xs">
+                  <div className="flex justify-between items-center text-slate-600">
+                    <span>Plazo de Crédito:</span>
+                    <span className="font-semibold text-slate-800">{c.creditDays > 0 ? `${c.creditDays} días` : 'Contado'}</span>
                   </div>
-                )}
-                {c.phone && (
-                  <div className="flex items-center gap-2">
-                    <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <a href={`tel:${c.phone}`} className="hover:text-blue-600 transition-colors">{c.phone}</a>
+                  <div className="flex justify-between items-center text-slate-600">
+                    <span>Límite de Crédito:</span>
+                    <span className="font-semibold text-slate-800">${(c.creditLimit || 0).toLocaleString()}</span>
                   </div>
-                )}
-                {c.whatsapp && (
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <MessageSquare className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                      <span className="font-medium text-emerald-700">{c.whatsapp}</span>
+                  {c.currentDebt > 0 && (
+                    <div className="flex justify-between items-center text-rose-600 font-semibold pt-1 border-t border-slate-200/60">
+                      <span>Saldo Pendiente:</span>
+                      <span>${c.currentDebt.toLocaleString()}</span>
                     </div>
-                    <button
-                      onClick={() => handleSendWhatsAppMessage(c)}
-                      className="px-2 py-0.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded text-[11px] font-bold inline-flex items-center gap-1 transition-colors"
-                      title="Enviar mensaje por WhatsApp"
-                    >
-                      <span>WhatsApp</span>
-                    </button>
-                  </div>
-                )}
-                {c.email && (
-                  <div className="flex items-center gap-2">
-                    <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <a href={`mailto:${c.email}`} className="truncate hover:text-blue-600 transition-colors">{c.email}</a>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
 
-              {/* Credit Terms & Balance */}
-              <div className="bg-slate-50 rounded-xl p-3 mb-4 space-y-1 text-xs">
-                <div className="flex justify-between items-center text-slate-600">
-                  <span>Plazo de Crédito:</span>
-                  <span className="font-semibold text-slate-800">{c.creditDays > 0 ? `${c.creditDays} días` : 'Contado'}</span>
-                </div>
-                <div className="flex justify-between items-center text-slate-600">
-                  <span>Límite de Crédito:</span>
-                  <span className="font-semibold text-slate-800">${(c.creditLimit || 0).toLocaleString()}</span>
-                </div>
-                {c.currentDebt > 0 && (
-                  <div className="flex justify-between items-center text-rose-600 font-semibold pt-1 border-t border-slate-200/60">
-                    <span>Saldo Pendiente:</span>
-                    <span>${c.currentDebt.toLocaleString()}</span>
-                  </div>
-                )}
-              </div>
-            </div>
+              {/* Actions Bar */}
+              <div className="flex items-center justify-between pt-2 border-t border-slate-100 gap-1 flex-wrap">
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setViewingClient(c)}
+                    className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors"
+                    title="Ver detalle completo del cliente"
+                  >
+                    <Eye className="w-4 h-4" />
+                  </button>
 
-            {/* Actions Bar */}
-            <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => handleOpenEdit(c)}
-                  className="p-1.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg border border-slate-200 transition-colors"
-                  title="Editar cliente"
-                >
-                  <Edit className="w-4 h-4" />
-                </button>
+                  <button
+                    onClick={() => handleOpenEdit(c)}
+                    className="p-1.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg border border-slate-200 transition-colors"
+                    title="Editar datos del cliente"
+                  >
+                    <Edit className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    onClick={() => handleToggleActive(c)}
+                    className={`p-1.5 rounded-lg border transition-colors ${
+                      isActive 
+                        ? 'text-amber-600 border-amber-200 hover:bg-amber-50' 
+                        : 'text-emerald-600 border-emerald-200 hover:bg-emerald-50'
+                    }`}
+                    title={isActive ? 'Desactivar cliente' : 'Activar cliente'}
+                  >
+                    {isActive ? <XCircle className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
+                  </button>
+
+                  <button
+                    onClick={() => handleDelete(c.id, c.name)}
+                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg border border-slate-200 transition-colors"
+                    title="Eliminar permanentemente al cliente"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
 
                 <button
-                  onClick={() => handleDelete(c.id, c.name)}
-                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg border border-slate-200 transition-colors"
-                  title="Eliminar cliente"
+                  onClick={() => handleSendWhatsAppMessage(c)}
+                  className="px-2.5 py-1.5 rounded-lg border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Contactar</span>
                 </button>
               </div>
-
-              <button
-                onClick={() => handleSendWhatsAppMessage(c)}
-                className="px-3 py-1.5 rounded-lg border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs"
-              >
-                <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Contactar</span>
-              </button>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {filteredClients.length === 0 && (
@@ -525,6 +608,93 @@ Estamos a sus órdenes. ✨`;
             <UserPlus className="w-4 h-4" />
             <span>Registrar Cliente</span>
           </button>
+        </div>
+      )}
+
+      {/* MODAL VER DETALLE DEL CLIENTE */}
+      {viewingClient && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg max-h-[92vh] flex flex-col overflow-hidden">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-md shadow-blue-600/20">
+                  <Users className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-800">{viewingClient.name}</h2>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                    (viewingClient.active ?? true) ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-200 text-slate-600 border-slate-300'
+                  }`}>
+                    {(viewingClient.active ?? true) ? 'Cliente Activo' : 'Cliente Inactivo'}
+                  </span>
+                </div>
+              </div>
+              <button 
+                onClick={() => setViewingClient(null)}
+                className="p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-4 text-xs text-slate-700">
+              <div className="grid grid-cols-2 gap-3 bg-slate-50 p-4 rounded-xl">
+                <div>
+                  <p className="text-slate-400 font-medium">Lista de Precios</p>
+                  <p className="font-bold text-slate-800 text-sm">{viewingClient.priceList}</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 font-medium">RFC</p>
+                  <p className="font-mono font-semibold text-slate-800">{viewingClient.rfc || 'No registrado'}</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 font-medium">Límite de Crédito</p>
+                  <p className="font-bold text-slate-800">${(viewingClient.creditLimit || 0).toLocaleString()} MXN</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 font-medium">Plazo Permitido</p>
+                  <p className="font-semibold text-slate-800">{viewingClient.creditDays > 0 ? `${viewingClient.creditDays} días` : 'Contado'}</p>
+                </div>
+                <div className="col-span-2 pt-2 border-t border-slate-200">
+                  <p className="text-slate-400 font-medium">Saldo Pendiente de Cobro</p>
+                  <p className="font-bold text-rose-600 text-base">${(viewingClient.currentDebt || 0).toLocaleString()} MXN</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <p className="font-semibold text-slate-800">Información de Contacto y Envío:</p>
+                <p><span className="text-slate-500">Dirección:</span> {viewingClient.address || 'No especificada'}</p>
+                <p><span className="text-slate-500">Teléfono:</span> {viewingClient.phone || 'No especificado'}</p>
+                <p><span className="text-slate-500">WhatsApp:</span> {viewingClient.whatsapp || 'No especificado'}</p>
+                <p><span className="text-slate-500">Correo:</span> {viewingClient.email || 'No especificado'}</p>
+                {viewingClient.notes && (
+                  <p className="bg-amber-50 border border-amber-200 p-2.5 rounded-lg text-amber-800 mt-2">
+                    <span className="font-bold block">Notas / Observaciones:</span> {viewingClient.notes}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <button
+                onClick={() => {
+                  const client = viewingClient;
+                  setViewingClient(null);
+                  handleOpenEdit(client);
+                }}
+                className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold flex items-center gap-1.5 transition-colors"
+              >
+                <Edit className="w-4 h-4" />
+                <span>Editar este Cliente</span>
+              </button>
+              <button
+                onClick={() => setViewingClient(null)}
+                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl font-semibold transition-colors"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -568,6 +738,23 @@ Estamos a sus órdenes. ✨`;
                     placeholder="Ej. Pastelería El Maná del Cielo"
                     className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-medium text-slate-800"
                   />
+                </div>
+
+                {/* Estatus Activo / Inactivo */}
+                <div className="md:col-span-2 flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <div>
+                    <p className="text-xs font-bold text-slate-800">Estado del Cliente en el Sistema</p>
+                    <p className="text-[11px] text-slate-500">Los clientes inactivos se ocultan de las ventas rápidas</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActive(!active)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                      active ? 'bg-emerald-600 text-white' : 'bg-slate-300 text-slate-700'
+                    }`}
+                  >
+                    {active ? '✓ Cliente Activo' : '✕ Desactivado / Inactivo'}
+                  </button>
                 </div>
 
                 {/* Dirección */}
@@ -664,6 +851,18 @@ Estamos a sus órdenes. ✨`;
                     min={0}
                     value={creditLimit}
                     onChange={(e) => setCreditLimit(Number(e.target.value))}
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  />
+                </div>
+
+                {/* Notas / Observaciones */}
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Notas Comerciales / Condiciones Especiales</label>
+                  <textarea 
+                    rows={2}
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Instrucciones de entrega, horarios de recepción, etc."
                     className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                   />
                 </div>

@@ -44,7 +44,9 @@ export const EmployeesManager: React.FC<EmployeesManagerProps> = ({ currentUser 
 
   // Modal State
   const [showModal, setShowModal] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [viewingUser, setViewingUser] = useState<User | null>(null);
 
   // Form Fields
   const [name, setName] = useState('');
@@ -57,6 +59,7 @@ export const EmployeesManager: React.FC<EmployeesManagerProps> = ({ currentUser 
   const [jobTitle, setJobTitle] = useState('');
   const [department, setDepartment] = useState('');
   const [active, setActive] = useState(true);
+  const [notes, setNotes] = useState('');
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>(['dashboard']);
 
   const loadUsers = async () => {
@@ -123,6 +126,7 @@ export const EmployeesManager: React.FC<EmployeesManagerProps> = ({ currentUser 
     setJobTitle('');
     setDepartment('');
     setActive(true);
+    setNotes('');
     setSelectedPermissions(['dashboard', 'crm', 'caja']);
     setShowModal(true);
   };
@@ -138,8 +142,14 @@ export const EmployeesManager: React.FC<EmployeesManagerProps> = ({ currentUser 
     setJobTitle(u.jobTitle || '');
     setDepartment(u.department || '');
     setActive(u.active ?? true);
+    setNotes(u.notes || '');
     setSelectedPermissions(u.permissions || []);
     setShowModal(true);
+  };
+
+  const handleOpenView = (u: User) => {
+    setViewingUser(u);
+    setShowViewModal(true);
   };
 
   // Suggest default permissions on role change
@@ -195,6 +205,7 @@ export const EmployeesManager: React.FC<EmployeesManagerProps> = ({ currentUser 
       permissions: selectedPermissions,
       jobTitle: jobTitle.trim(),
       department: department.trim(),
+      notes: notes.trim(),
       avatarUrl: editingUser?.avatarUrl || '',
       createdAt: editingUser?.createdAt || new Date().toISOString()
     };
@@ -622,6 +633,14 @@ Rol: ${getRoleDisplayName(u.role)}`;
 
               <div className="flex items-center gap-1.5">
                 <button
+                  onClick={() => handleOpenView(u)}
+                  className="p-1.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg border border-slate-200 transition-colors"
+                  title="Ver detalles completos del empleado"
+                >
+                  <Eye className="w-4 h-4" />
+                </button>
+
+                <button
                   onClick={() => handleCopyCredentials(u)}
                   className="p-1.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors"
                   title="Copiar credenciales al portapapeles"
@@ -866,6 +885,20 @@ Rol: ${getRoleDisplayName(u.role)}`;
                 </div>
               </div>
 
+              {/* Notes & Internal Observations */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Notas / Observaciones Internas
+                </label>
+                <textarea
+                  rows={2}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Información adicional del empleado, horario laboral, observaciones de contrato o responsabilidades..."
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                />
+              </div>
+
               {/* Footer */}
               <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
                 <button
@@ -886,6 +919,7 @@ Rol: ${getRoleDisplayName(u.role)}`;
                       active,
                       jobTitle,
                       department,
+                      notes,
                       permissions: selectedPermissions
                     };
                     handleShareCredentialsWhatsApp(tempUser);
@@ -917,6 +951,138 @@ Rol: ${getRoleDisplayName(u.role)}`;
 
             </form>
 
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DETALLES DEL EMPLEADO (VIEW MODAL) */}
+      {showViewModal && viewingUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col my-auto">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-purple-500/10 via-indigo-500/5 to-transparent">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full overflow-hidden bg-gradient-to-tr from-purple-500 to-indigo-600 p-0.5 shadow-sm flex items-center justify-center shrink-0">
+                  {viewingUser.avatarUrl ? (
+                    <img src={viewingUser.avatarUrl} alt={viewingUser.name} className="w-full h-full object-cover rounded-full bg-white" referrerPolicy="no-referrer" />
+                  ) : (
+                    <div className="w-full h-full bg-white rounded-full flex items-center justify-center text-purple-700 font-bold text-xl">
+                      {viewingUser.name.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-800 leading-tight">{viewingUser.name}</h2>
+                  <p className="text-xs font-mono text-slate-500">@{viewingUser.username}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowViewModal(false)}
+                className="p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 text-xs text-slate-700 overflow-y-auto max-h-[70vh]">
+              <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
+                <div>
+                  <span className="font-semibold text-slate-500 block">Rol / Función:</span>
+                  <div className="mt-1">{getRoleBadge(viewingUser.role)}</div>
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-500 block">Estado del Usuario:</span>
+                  <span className={`inline-block mt-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
+                    viewingUser.active ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'
+                  }`}>
+                    {viewingUser.active ? '● Activo en Sistema' : '○ Inactivo / Bloqueado'}
+                  </span>
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-500 block">Puesto / Cargo:</span>
+                  <p className="font-medium text-slate-800 text-sm mt-0.5">{viewingUser.jobTitle || 'No especificado'}</p>
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-500 block">Departamento:</span>
+                  <p className="font-medium text-slate-800 text-sm mt-0.5">{viewingUser.department || 'General'}</p>
+                </div>
+              </div>
+
+              <div className="space-y-2 border-t border-slate-100 pt-3">
+                <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[10px]">Información de Contacto</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100 flex items-center gap-2">
+                    <Mail className="w-4 h-4 text-slate-400 shrink-0" />
+                    <span className="truncate">{viewingUser.email || 'Sin correo'}</span>
+                  </div>
+                  <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100 flex items-center gap-2">
+                    <Phone className="w-4 h-4 text-slate-400 shrink-0" />
+                    <span>{viewingUser.phone || 'Sin teléfono'}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2 border-t border-slate-100 pt-3">
+                <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[10px]">Credenciales de Acceso</h4>
+                <div className="bg-purple-50/70 p-3 rounded-xl border border-purple-200 flex items-center justify-between">
+                  <div>
+                    <span className="text-[11px] text-purple-700 font-semibold block">PIN / Clave de Acceso</span>
+                    <span className="font-mono font-bold text-sm text-purple-950">{viewingUser.pin}</span>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => handleCopyCredentials(viewingUser)}
+                      className="px-2.5 py-1.5 bg-white border border-purple-200 rounded-lg text-purple-800 text-xs font-semibold hover:bg-purple-100 flex items-center gap-1"
+                    >
+                      <Copy className="w-3.5 h-3.5" /> Copiar
+                    </button>
+                    <button
+                      onClick={() => handleShareCredentialsWhatsApp(viewingUser)}
+                      className="px-2.5 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 flex items-center gap-1 shadow-sm"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5" /> WhatsApp
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {viewingUser.notes && (
+                <div className="space-y-1 border-t border-slate-100 pt-3">
+                  <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[10px]">Observaciones / Notas Internas</h4>
+                  <p className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-700 whitespace-pre-wrap">
+                    {viewingUser.notes}
+                  </p>
+                </div>
+              )}
+
+              <div className="space-y-2 border-t border-slate-100 pt-3">
+                <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[10px]">Permisos de Módulos</h4>
+                <div className="flex flex-wrap gap-1.5">
+                  {(viewingUser.permissions || []).map((p) => (
+                    <span key={p} className="px-2.5 py-1 rounded-md bg-slate-100 border border-slate-200 text-slate-700 text-[11px] font-medium">
+                      {p}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center shrink-0">
+              <button
+                onClick={() => {
+                  setShowViewModal(false);
+                  handleOpenEdit(viewingUser);
+                }}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm"
+              >
+                <Edit className="w-3.5 h-3.5" /> Editar Datos
+              </button>
+              <button
+                onClick={() => setShowViewModal(false)}
+                className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-semibold"
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
         </div>
       )}

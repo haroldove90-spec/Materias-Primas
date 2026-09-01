@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Truck, Plus, Search, Filter, Phone, Mail, MapPin, 
   CreditCard, Star, Edit, Trash2, CheckCircle2, XCircle, 
-  FileText, Download, RefreshCw, ShoppingCart, AlertCircle, Building, Check, X, MessageSquare
+  FileText, Download, RefreshCw, ShoppingCart, AlertCircle, Building, Check, X, MessageSquare, Eye
 } from 'lucide-react';
 import { Supplier, User } from '../types';
 import { MockDatabase } from '../data';
@@ -28,7 +28,9 @@ export const SuppliersManager: React.FC<SuppliersManagerProps> = ({ currentUser,
 
   // Modal State for New/Edit
   const [showModal, setShowModal] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
+  const [viewingSupplier, setViewingSupplier] = useState<Supplier | null>(null);
 
   // Form State
   const [name, setName] = useState('');
@@ -141,6 +143,11 @@ export const SuppliersManager: React.FC<SuppliersManagerProps> = ({ currentUser,
     setNotes(s.notes || '');
     setActive(s.active ?? true);
     setShowModal(true);
+  };
+
+  const handleOpenView = (s: Supplier) => {
+    setViewingSupplier(s);
+    setShowViewModal(true);
   };
 
   const handleSaveSupplier = async (e: React.FormEvent) => {
@@ -531,6 +538,14 @@ export const SuppliersManager: React.FC<SuppliersManagerProps> = ({ currentUser,
             <div className="flex items-center justify-between pt-2 border-t border-slate-100">
               <div className="flex items-center gap-1">
                 <button
+                  onClick={() => handleOpenView(s)}
+                  className="p-1.5 text-slate-600 hover:text-amber-600 hover:bg-amber-50 rounded-lg border border-slate-200 transition-colors"
+                  title="Ver detalle del proveedor"
+                >
+                  <Eye className="w-4 h-4" />
+                </button>
+
+                <button
                   onClick={() => handleToggleActive(s)}
                   className={`p-1.5 rounded-lg border text-xs font-medium transition-colors ${
                     s.active ? 'text-emerald-700 hover:bg-emerald-50 border-emerald-200' : 'text-slate-500 hover:bg-slate-100 border-slate-200'
@@ -810,6 +825,142 @@ export const SuppliersManager: React.FC<SuppliersManagerProps> = ({ currentUser,
 
             </form>
 
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DETALLES DEL PROVEEDOR (VIEW MODAL) */}
+      {showViewModal && viewingSupplier && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col my-auto">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-amber-500/10 via-orange-500/5 to-transparent">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-md shadow-amber-500/20">
+                  <Truck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-800 leading-tight">{viewingSupplier.name}</h2>
+                  <p className="text-xs text-slate-500 font-mono">RFC: {viewingSupplier.rfc || 'No especificado'}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowViewModal(false)}
+                className="p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 text-xs text-slate-700 overflow-y-auto max-h-[70vh]">
+              <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
+                <div>
+                  <span className="font-semibold text-slate-500 block">Categoría:</span>
+                  <span className="inline-block mt-0.5 text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                    {viewingSupplier.category || 'General'}
+                  </span>
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-500 block">Estado:</span>
+                  <span className={`inline-block mt-0.5 text-xs font-bold px-2.5 py-0.5 rounded-full ${
+                    viewingSupplier.active ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'
+                  }`}>
+                    {viewingSupplier.active ? '● Activo' : '○ Inactivo'}
+                  </span>
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-500 block">Condiciones de Pago:</span>
+                  <p className="font-bold text-slate-800 text-sm mt-0.5">{viewingSupplier.paymentTerms}</p>
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-500 block">Límite de Crédito:</span>
+                  <p className="font-bold text-slate-800 text-sm mt-0.5">${(viewingSupplier.creditLimit || 0).toLocaleString()} MXN</p>
+                </div>
+              </div>
+
+              <div className="space-y-2 border-t border-slate-100 pt-3">
+                <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[10px]">Contacto y Comunicación</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100 flex items-center gap-2">
+                    <Building className="w-4 h-4 text-slate-400 shrink-0" />
+                    <span className="truncate">{viewingSupplier.contactName || 'Sin contacto directo'}</span>
+                  </div>
+                  <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100 flex items-center gap-2">
+                    <Phone className="w-4 h-4 text-slate-400 shrink-0" />
+                    <span>{viewingSupplier.phone || 'Sin teléfono'}</span>
+                  </div>
+                  <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100 flex items-center gap-2 sm:col-span-2">
+                    <Mail className="w-4 h-4 text-slate-400 shrink-0" />
+                    <span className="truncate">{viewingSupplier.email || 'Sin correo'}</span>
+                  </div>
+                  {viewingSupplier.address && (
+                    <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100 flex items-start gap-2 sm:col-span-2">
+                      <MapPin className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+                      <span>{viewingSupplier.address}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {viewingSupplier.whatsapp && (
+                <div className="bg-emerald-50/70 p-3 rounded-xl border border-emerald-200 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4 text-emerald-600" />
+                    <div>
+                      <span className="text-[11px] text-emerald-800 font-semibold block">WhatsApp Directo</span>
+                      <span className="font-mono font-bold text-xs text-emerald-950">{viewingSupplier.whatsapp}</span>
+                    </div>
+                  </div>
+                  <a
+                    href={`https://api.whatsapp.com/send?phone=${viewingSupplier.whatsapp.replace(/\D/g, '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors shadow-sm flex items-center gap-1.5"
+                  >
+                    <span>Abrir Chat</span>
+                  </a>
+                </div>
+              )}
+
+              {viewingSupplier.notes && (
+                <div className="space-y-1 border-t border-slate-100 pt-3">
+                  <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[10px]">Notas Comerciales y Logística</h4>
+                  <p className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-700 whitespace-pre-wrap">
+                    {viewingSupplier.notes}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center shrink-0">
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setShowViewModal(false);
+                    handleOpenEdit(viewingSupplier);
+                  }}
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                >
+                  <Edit className="w-3.5 h-3.5" /> Editar
+                </button>
+                {onCreatePurchaseOrder && (
+                  <button
+                    onClick={() => {
+                      setShowViewModal(false);
+                      onCreatePurchaseOrder(viewingSupplier);
+                    }}
+                    className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                  >
+                    <ShoppingCart className="w-3.5 h-3.5" /> Generar OC
+                  </button>
+                )}
+              </div>
+              <button
+                onClick={() => setShowViewModal(false)}
+                className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-semibold"
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
         </div>
       )}

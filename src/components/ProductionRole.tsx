@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Beaker, ClipboardList, Check, AlertCircle, Plus, Info, 
-  Layers, Package, BadgeAlert, UserCheck, Calendar, Activity, FileCheck, ShoppingCart, Trash2, Download, Printer
+  Layers, Package, BadgeAlert, UserCheck, Calendar, Activity, FileCheck, ShoppingCart, Trash2, Download, Printer,
+  Eye, Edit, CheckCircle2, XCircle, X, Search, Filter
 } from 'lucide-react';
 import { MockDatabase } from '../data';
 import { RawMaterial, Formula, ProductionOrder, StockMovement, User } from '../types';
@@ -45,6 +46,42 @@ export default function ProductionRole({ onBack, currentUser, activeTab: propsAc
   const [qaSensory, setQaSensory] = useState(false);
   const [qaSealing, setQaSealing] = useState(false);
   const [qaOrderId, setQaOrderId] = useState<string | null>(null);
+
+  // Search and filter states
+  const [orderSearchTerm, setOrderSearchTerm] = useState('');
+  const [orderStatusFilter, setOrderStatusFilter] = useState<'all' | 'pending' | 'in_progress' | 'completed' | 'cancelled'>('all');
+  const [orderActiveFilter, setOrderActiveFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  
+  const [formulaSearchTerm, setFormulaSearchTerm] = useState('');
+  const [formulaActiveFilter, setFormulaActiveFilter] = useState<'all' | 'active' | 'inactive'>('all');
+
+  // Formula CRUD Modal states
+  const [editingFormula, setEditingFormula] = useState<Formula | null>(null);
+  const [showEditFormulaModal, setShowEditFormulaModal] = useState(false);
+  const [viewingFormula, setViewingFormula] = useState<Formula | null>(null);
+  const [showViewFormulaModal, setShowViewFormulaModal] = useState(false);
+
+  // Formula Edit Form fields
+  const [editFormulaName, setEditFormulaName] = useState('');
+  const [editFormulaDesc, setEditFormulaDesc] = useState('');
+  const [editFormulaLabor, setEditFormulaLabor] = useState(1200);
+  const [editFormulaOther, setEditFormulaOther] = useState(800);
+  const [editFormulaActive, setEditFormulaActive] = useState(true);
+  const [editFormulaIngredients, setEditFormulaIngredients] = useState<{materialId: string, percentage: number}[]>([]);
+
+  // Order CRUD Modal states
+  const [editingOrder, setEditingOrder] = useState<ProductionOrder | null>(null);
+  const [showEditOrderModal, setShowEditOrderModal] = useState(false);
+  const [viewingOrder, setViewingOrder] = useState<ProductionOrder | null>(null);
+  const [showViewOrderModal, setShowViewOrderModal] = useState(false);
+
+  // Order Edit Form fields
+  const [editOrderFormulaId, setEditOrderFormulaId] = useState('');
+  const [editOrderQty, setEditOrderQty] = useState(100);
+  const [editOrderStatus, setEditOrderStatus] = useState<'pending' | 'in_progress' | 'completed' | 'cancelled'>('pending');
+  const [editOrderOperator, setEditOrderOperator] = useState('');
+  const [editOrderNotes, setEditOrderNotes] = useState('');
+  const [editOrderActive, setEditOrderActive] = useState(true);
 
   // Load database
   const loadDatabase = () => {
@@ -170,6 +207,171 @@ export default function ProductionRole({ onBack, currentUser, activeTab: propsAc
     setCreateOrderNotes('');
     loadDatabase();
     alert('Órden de trabajo creada con estatus Pendiente de Pre-chequeo.');
+  };
+
+  // --- FORMULAS CRUD HANDLERS ---
+  const handleOpenViewFormula = (f: Formula) => {
+    setViewingFormula(f);
+    setShowViewFormulaModal(true);
+  };
+
+  const handleOpenEditFormula = (f: Formula) => {
+    setEditingFormula(f);
+    setEditFormulaName(f.name);
+    setEditFormulaDesc(f.description || '');
+    setEditFormulaLabor(f.laborCost || 1200);
+    setEditFormulaOther(f.otherCost || 800);
+    setEditFormulaActive(f.active !== false);
+    setEditFormulaIngredients(
+      f.ingredients ? f.ingredients.map(ing => ({ materialId: ing.materialId, percentage: ing.percentage })) : []
+    );
+    setShowEditFormulaModal(true);
+  };
+
+  const handleToggleFormulaActive = (f: Formula) => {
+    const newStatus = !(f.active !== false);
+    const updated = formulas.map(item => item.id === f.id ? { ...item, active: newStatus } : item);
+    MockDatabase.saveFormulas(updated);
+    MockDatabase.addAuditLog(
+      currentUser.name,
+      `${newStatus ? 'Activó' : 'Desactivó'} receta de fórmula`,
+      'Producción',
+      `Fórmula: ${f.name} (ID: ${f.id}) ahora está ${newStatus ? 'ACTIVA' : 'INACTIVA'}`
+    );
+    setFormulas(updated);
+  };
+
+  const handleDeleteFormula = (id: string, name: string) => {
+    if (!window.confirm(`¿Estás seguro de eliminar permanentemente la receta "${name}"?`)) return;
+    const updated = formulas.filter(f => f.id !== id);
+    MockDatabase.saveFormulas(updated);
+    MockDatabase.addAuditLog(
+      currentUser.name,
+      `Eliminó receta de producción`,
+      'Producción',
+      `Fórmula: ${name} (ID: ${id})`
+    );
+    setFormulas(updated);
+    if (selectedFormulaId === id) {
+      setSelectedFormulaId(updated.length > 0 ? updated[0].id : '');
+    }
+  };
+
+  const handleSaveEditFormula = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingFormula || !editFormulaName) return;
+
+    const totalPercent = editFormulaIngredients.reduce((acc, curr) => acc + curr.percentage, 0);
+    if (editFormulaIngredients.length > 0 && Math.abs(totalPercent - 100) > 0.1) {
+      alert(`La suma de porcentajes de la receta debe ser exactamente 100%. Actualmente es: ${totalPercent.toFixed(1)}%`);
+      return;
+    }
+
+    const updatedFormulas = formulas.map(f => {
+      if (f.id === editingFormula.id) {
+        return {
+          ...f,
+          name: editFormulaName,
+          description: editFormulaDesc,
+          laborCost: editFormulaLabor,
+          otherCost: editFormulaOther,
+          active: editFormulaActive,
+          ingredients: editFormulaIngredients.map(fi => ({
+            materialId: fi.materialId,
+            percentage: fi.percentage,
+            amountPerThousandLiters: fi.percentage * 10
+          }))
+        };
+      }
+      return f;
+    });
+
+    MockDatabase.saveFormulas(updatedFormulas);
+    MockDatabase.addAuditLog(
+      currentUser.name,
+      `Editó y actualizó receta de producción`,
+      'Producción',
+      `Receta: ${editFormulaName} (ID: ${editingFormula.id})`
+    );
+    setFormulas(updatedFormulas);
+    setShowEditFormulaModal(false);
+    setEditingFormula(null);
+    alert('Receta actualizada exitosamente.');
+  };
+
+  // --- ORDERS CRUD HANDLERS ---
+  const handleOpenViewOrder = (order: ProductionOrder) => {
+    setViewingOrder(order);
+    setShowViewOrderModal(true);
+  };
+
+  const handleOpenEditOrder = (order: ProductionOrder) => {
+    setEditingOrder(order);
+    setEditOrderFormulaId(order.formulaId);
+    setEditOrderQty(order.quantityLiters);
+    setEditOrderStatus(order.status);
+    setEditOrderOperator(order.operator || currentUser.name);
+    setEditOrderNotes(order.notes || '');
+    setEditOrderActive(order.active !== false);
+    setShowEditOrderModal(true);
+  };
+
+  const handleToggleOrderActive = (order: ProductionOrder) => {
+    const newStatus = !(order.active !== false);
+    const updated = productionOrders.map(o => o.id === order.id ? { ...o, active: newStatus } : o);
+    MockDatabase.saveProductionOrders(updated);
+    MockDatabase.addAuditLog(
+      currentUser.name,
+      `${newStatus ? 'Activó' : 'Desactivó'} orden de producción`,
+      'Producción',
+      `Orden ID: ${order.id} ahora está ${newStatus ? 'ACTIVA' : 'INACTIVA'}`
+    );
+    setProductionOrders(updated);
+  };
+
+  const handleDeleteOrder = (id: string) => {
+    if (!window.confirm(`¿Estás seguro de eliminar permanentemente la orden de producción ${id}?`)) return;
+    const updated = productionOrders.filter(o => o.id !== id);
+    MockDatabase.saveProductionOrders(updated);
+    MockDatabase.addAuditLog(
+      currentUser.name,
+      `Eliminó orden de producción`,
+      'Producción',
+      `Orden ID: ${id}`
+    );
+    setProductionOrders(updated);
+  };
+
+  const handleSaveEditOrder = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingOrder) return;
+
+    const updated = productionOrders.map(o => {
+      if (o.id === editingOrder.id) {
+        return {
+          ...o,
+          formulaId: editOrderFormulaId,
+          quantityLiters: editOrderQty,
+          status: editOrderStatus,
+          operator: editOrderOperator,
+          notes: editOrderNotes,
+          active: editOrderActive
+        };
+      }
+      return o;
+    });
+
+    MockDatabase.saveProductionOrders(updated);
+    MockDatabase.addAuditLog(
+      currentUser.name,
+      `Actualizó datos de la orden de producción`,
+      'Producción',
+      `Orden ID: ${editingOrder.id}, Estatus: ${editOrderStatus}, Litros: ${editOrderQty}`
+    );
+    setProductionOrders(updated);
+    setShowEditOrderModal(false);
+    setEditingOrder(null);
+    alert('Orden de producción actualizada correctamente.');
   };
 
   // Pre-chequeo del Almacén para una Orden
@@ -591,13 +793,13 @@ export default function ProductionRole({ onBack, currentUser, activeTab: propsAc
                 </h3>
                 <div className="flex items-center space-x-2">
                   <button
-                    onClick={() => exportToExcel(productionOrders.map(po => ({ Folio: po.id, Receta: formulas.find(f => f.id === po.formulaId)?.name || po.formulaId, Cantidad: `${po.quantityLiters} kg`, Estatus: po.status, Responsable: po.assignedTo, Fecha: new Date(po.createdAt).toLocaleDateString('es-MX') })), 'Ordenes_de_Produccion_Miauloo')}
+                    onClick={() => exportToExcel(productionOrders.map(po => ({ Folio: po.id, Receta: formulas.find(f => f.id === po.formulaId)?.name || po.formulaId, Cantidad: `${po.quantityLiters} kg`, Estatus: po.status, Responsable: po.operator, Fecha: new Date(po.createdAt).toLocaleDateString('es-MX') })), 'Ordenes_de_Produccion_Miauloo')}
                     className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-all"
                   >
                     <Download className="w-3.5 h-3.5" /> Excel
                   </button>
                   <button
-                    onClick={() => exportToPDF('Registro de Órdenes de Producción Miauloo', ['Folio', 'Receta / Producto', 'Volumen (kg)', 'Estatus', 'Operador', 'Fecha'], productionOrders.map(po => [po.id, formulas.find(f => f.id === po.formulaId)?.name || po.formulaId, `${po.quantityLiters} kg`, po.status.toUpperCase(), po.assignedTo, new Date(po.createdAt).toLocaleDateString('es-MX')]))}
+                    onClick={() => exportToPDF('Registro de Órdenes de Producción Miauloo', ['Folio', 'Receta / Producto', 'Volumen (kg)', 'Estatus', 'Operador', 'Fecha'], productionOrders.map(po => [po.id, formulas.find(f => f.id === po.formulaId)?.name || po.formulaId, `${po.quantityLiters} kg`, po.status.toUpperCase(), po.operator, new Date(po.createdAt).toLocaleDateString('es-MX')]))}
                     className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-all"
                   >
                     <Printer className="w-3.5 h-3.5" /> PDF
@@ -605,68 +807,170 @@ export default function ProductionRole({ onBack, currentUser, activeTab: propsAc
                 </div>
               </div>
 
+              {/* Filtros y Buscador de Órdenes */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-4 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                  <input
+                    type="text"
+                    placeholder="Buscar por folio, receta, operador o notas..."
+                    value={orderSearchTerm}
+                    onChange={(e) => setOrderSearchTerm(e.target.value)}
+                    className="w-full pl-8 pr-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                  />
+                </div>
+                <div>
+                  <select
+                    value={orderStatusFilter}
+                    onChange={(e) => setOrderStatusFilter(e.target.value as any)}
+                    className="w-full py-1.5 px-2.5 text-xs bg-white border border-slate-200 rounded-lg font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                  >
+                    <option value="all">Todos los estatus</option>
+                    <option value="pending">Pendientes</option>
+                    <option value="in_progress">En Mezcla / Dosificación</option>
+                    <option value="completed">Completadas</option>
+                    <option value="cancelled">Canceladas</option>
+                  </select>
+                </div>
+                <div>
+                  <select
+                    value={orderActiveFilter}
+                    onChange={(e) => setOrderActiveFilter(e.target.value as any)}
+                    className="w-full py-1.5 px-2.5 text-xs bg-white border border-slate-200 rounded-lg font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                  >
+                    <option value="all">Todas (Activas e Inactivas)</option>
+                    <option value="active">Solo Activas</option>
+                    <option value="inactive">Solo Inactivas / Archivadas</option>
+                  </select>
+                </div>
+              </div>
+
               <div className="space-y-4">
-                {productionOrders.map(order => {
-                  const formula = formulas.find(f => f.id === order.formulaId);
-                  const statusColors = {
-                    pending: 'bg-yellow-50 text-yellow-800 border-yellow-200',
-                    in_progress: 'bg-cyan-50 text-cyan-800 border-cyan-200',
-                    completed: 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                  };
+                {productionOrders
+                  .filter(order => {
+                    const formula = formulas.find(f => f.id === order.formulaId);
+                    const formulaName = formula ? formula.name.toLowerCase() : '';
+                    const matchesSearch = 
+                      order.id.toLowerCase().includes(orderSearchTerm.toLowerCase()) ||
+                      formulaName.includes(orderSearchTerm.toLowerCase()) ||
+                      (order.operator && order.operator.toLowerCase().includes(orderSearchTerm.toLowerCase())) ||
+                      (order.notes && order.notes.toLowerCase().includes(orderSearchTerm.toLowerCase()));
 
-                  return (
-                    <div 
-                      key={order.id} 
-                      className={`p-4 border rounded-xl transition-all shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 ${statusColors[order.status]}`}
-                    >
-                      <div>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-xs font-mono font-bold uppercase">{order.id}</span>
-                          <span className="text-[10px] bg-white border px-1.5 py-0.5 rounded font-semibold text-slate-500">
-                            {order.quantityLiters} Litros
-                          </span>
-                        </div>
-                        <h4 className="text-sm font-bold text-slate-950 mt-1">{formula?.name}</h4>
-                        {order.notes && <p className="text-xs text-slate-600 mt-1 italic">"{order.notes}"</p>}
-                        
-                        <div className="text-[10px] text-slate-500 mt-2 flex flex-wrap gap-x-3">
-                          <span>Operador: {order.operator}</span>
-                          <span>Creado: {new Date(order.createdAt).toLocaleString('es-MX')}</span>
-                          {order.completedAt && <span>Cerrado: {new Date(order.completedAt).toLocaleString('es-MX')}</span>}
-                        </div>
-                      </div>
+                    const matchesStatus = orderStatusFilter === 'all' || order.status === orderStatusFilter;
+                    const isActive = order.active !== false;
+                    const matchesActive = 
+                      orderActiveFilter === 'all' || 
+                      (orderActiveFilter === 'active' && isActive) || 
+                      (orderActiveFilter === 'inactive' && !isActive);
 
-                      <div className="flex items-center space-x-2">
-                        {order.status === 'completed' && (
-                          <div className="text-right">
-                            <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded block text-center mb-1">
-                              COMPLETADA
-                            </span>
-                            <span className="text-xs font-mono font-bold text-slate-700">Lote: {order.lote}</span>
+                    return matchesSearch && matchesStatus && matchesActive;
+                  })
+                  .map(order => {
+                    const formula = formulas.find(f => f.id === order.formulaId);
+                    const isActive = order.active !== false;
+                    const statusColors = {
+                      pending: 'bg-yellow-50 text-yellow-800 border-yellow-200',
+                      in_progress: 'bg-cyan-50 text-cyan-800 border-cyan-200',
+                      completed: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+                      cancelled: 'bg-slate-100 text-slate-600 border-slate-300'
+                    };
+
+                    return (
+                      <div 
+                        key={order.id} 
+                        className={`p-4 border rounded-xl transition-all shadow-sm flex flex-col justify-between gap-3 ${statusColors[order.status]} ${!isActive ? 'opacity-60 bg-slate-50' : ''}`}
+                      >
+                        <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-xs font-mono font-bold uppercase">{order.id}</span>
+                              <span className="text-[10px] bg-white border px-1.5 py-0.5 rounded font-semibold text-slate-600">
+                                {order.quantityLiters} Litros / kg
+                              </span>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                isActive ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-300'
+                              }`}>
+                                {isActive ? '● Activa' : '○ Inactiva'}
+                              </span>
+                            </div>
+                            <h4 className="text-sm font-bold text-slate-950 mt-1">{formula?.name || 'Receta'}</h4>
+                            {order.notes && <p className="text-xs text-slate-600 mt-1 italic">"{order.notes}"</p>}
+                            
+                            <div className="text-[10px] text-slate-500 mt-2 flex flex-wrap gap-x-3 gap-y-1">
+                              <span>Operador: <b>{order.operator}</b></span>
+                              <span>Creado: {new Date(order.createdAt).toLocaleString('es-MX')}</span>
+                              {order.completedAt && <span>Cerrado: {new Date(order.completedAt).toLocaleString('es-MX')}</span>}
+                              {order.lote && <span className="font-mono font-bold text-slate-700">Lote: {order.lote}</span>}
+                            </div>
                           </div>
-                        )}
 
-                        {order.status === 'pending' && (
-                          <button
-                            onClick={() => setSelectedOrder(order)}
-                            className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2 rounded-lg transition-all"
-                          >
-                            Pre-chequeo BOM
-                          </button>
-                        )}
+                          {/* Action Bar (View, Active Toggle, Edit, Delete) */}
+                          <div className="flex items-center gap-1.5 self-end md:self-start shrink-0">
+                            <button
+                              onClick={() => handleOpenViewOrder(order)}
+                              className="p-1.5 text-slate-600 hover:text-cyan-700 hover:bg-cyan-50 rounded-lg border border-slate-200 bg-white shadow-xs transition-colors"
+                              title="Ver detalle de la orden"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
 
-                        {order.status === 'in_progress' && (
-                          <button
-                            onClick={() => setQaOrderId(order.id)}
-                            className="bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-all flex items-center"
-                          >
-                            <FileCheck className="w-4 h-4 mr-1 animate-pulse" /> Validar Control de Calidad y Cerrar
-                          </button>
-                        )}
+                            <button
+                              onClick={() => handleToggleOrderActive(order)}
+                              className={`p-1.5 rounded-lg border text-xs font-medium transition-colors bg-white shadow-xs ${
+                                isActive ? 'text-emerald-700 hover:bg-emerald-50 border-emerald-200' : 'text-slate-500 hover:bg-slate-100 border-slate-200'
+                              }`}
+                              title={isActive ? 'Desactivar / Archivar orden' : 'Activar orden'}
+                            >
+                              {isActive ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+                            </button>
+
+                            <button
+                              onClick={() => handleOpenEditOrder(order)}
+                              className="p-1.5 text-slate-600 hover:text-amber-600 hover:bg-amber-50 rounded-lg border border-slate-200 bg-white shadow-xs transition-colors"
+                              title="Editar orden"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                            </button>
+
+                            <button
+                              onClick={() => handleDeleteOrder(order.id)}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg border border-slate-200 bg-white shadow-xs transition-colors"
+                              title="Eliminar orden"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Operational State Actions */}
+                        <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200/60">
+                          {order.status === 'completed' && (
+                            <span className="bg-emerald-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-md">
+                              ✓ COMPLETADA ({order.lote})
+                            </span>
+                          )}
+
+                          {order.status === 'pending' && (
+                            <button
+                              onClick={() => setSelectedOrder(order)}
+                              className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-3.5 py-1.5 rounded-lg transition-all shadow-xs"
+                            >
+                              Pre-chequeo BOM
+                            </button>
+                          )}
+
+                          {order.status === 'in_progress' && (
+                            <button
+                              onClick={() => setQaOrderId(order.id)}
+                              className="bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-bold px-3.5 py-1.5 rounded-lg transition-all flex items-center shadow-xs"
+                            >
+                              <FileCheck className="w-4 h-4 mr-1 animate-pulse" /> Validar Control de Calidad y Cerrar
+                            </button>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
               </div>
             </div>
 
@@ -679,27 +983,114 @@ export default function ProductionRole({ onBack, currentUser, activeTab: propsAc
             
             {/* Lista de Fórmulas */}
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm lg:col-span-1">
-              <h3 className="text-base font-semibold text-slate-900 mb-4">Recetario Industrial</h3>
-              <div className="space-y-2">
-                {formulas.map(f => (
-                  <button
-                    key={f.id}
-                    onClick={() => setSelectedFormulaId(f.id)}
-                    className={`w-full text-left p-3 rounded-lg border transition-all flex justify-between items-center ${
-                      selectedFormulaId === f.id 
-                        ? 'border-cyan-500 bg-cyan-50/50 text-cyan-900 font-semibold' 
-                        : 'border-slate-100 hover:bg-slate-50 text-slate-700'
-                    }`}
-                  >
-                    <span>{f.name}</span>
-                    <Beaker className="w-4 h-4 text-slate-400" />
-                  </button>
-                ))}
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-base font-semibold text-slate-900">Recetario Industrial</h3>
+                <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                  {formulas.length} recetas
+                </span>
+              </div>
+
+              {/* Filtros de Fórmulas */}
+              <div className="space-y-2 mb-4 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                <div className="relative">
+                  <Search className="w-3 h-3 text-slate-400 absolute left-2.5 top-2.5" />
+                  <input
+                    type="text"
+                    placeholder="Buscar receta..."
+                    value={formulaSearchTerm}
+                    onChange={(e) => setFormulaSearchTerm(e.target.value)}
+                    className="w-full pl-7 pr-2 py-1 text-xs bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                  />
+                </div>
+                <select
+                  value={formulaActiveFilter}
+                  onChange={(e) => setFormulaActiveFilter(e.target.value as any)}
+                  className="w-full py-1 px-2 text-xs bg-white border border-slate-200 rounded text-slate-700 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                >
+                  <option value="all">Todas las recetas</option>
+                  <option value="active">Solo Activas</option>
+                  <option value="inactive">Solo Inactivas / Desactivadas</option>
+                </select>
+              </div>
+
+              <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                {formulas
+                  .filter(f => {
+                    const matchesSearch = f.name.toLowerCase().includes(formulaSearchTerm.toLowerCase()) || 
+                      (f.description && f.description.toLowerCase().includes(formulaSearchTerm.toLowerCase()));
+                    const isActive = f.active !== false;
+                    const matchesActive = formulaActiveFilter === 'all' || 
+                      (formulaActiveFilter === 'active' && isActive) || 
+                      (formulaActiveFilter === 'inactive' && !isActive);
+                    return matchesSearch && matchesActive;
+                  })
+                  .map(f => {
+                    const isActive = f.active !== false;
+                    return (
+                      <div
+                        key={f.id}
+                        onClick={() => setSelectedFormulaId(f.id)}
+                        className={`p-3 rounded-lg border transition-all cursor-pointer flex flex-col gap-2 ${
+                          selectedFormulaId === f.id 
+                            ? 'border-cyan-500 bg-cyan-50/50 text-cyan-900 font-semibold' 
+                            : 'border-slate-100 hover:bg-slate-50 text-slate-700'
+                        } ${!isActive ? 'opacity-60 bg-slate-50/80' : ''}`}
+                      >
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-bold truncate">{f.name}</span>
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${
+                            isActive ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-300'
+                          }`}>
+                            {isActive ? 'Activa' : 'Inactiva'}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-200/50">
+                          <span>{f.ingredients?.length || 0} insumos</span>
+                          
+                          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={() => handleOpenViewFormula(f)}
+                              className="p-1 hover:text-cyan-700 hover:bg-white rounded border border-transparent hover:border-slate-200 transition-colors"
+                              title="Ver detalle"
+                            >
+                              <Eye className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={() => handleToggleFormulaActive(f)}
+                              className={`p-1 rounded border border-transparent hover:border-slate-200 transition-colors ${
+                                isActive ? 'hover:text-emerald-700' : 'hover:text-slate-700'
+                              }`}
+                              title={isActive ? 'Desactivar receta' : 'Activar receta'}
+                            >
+                              {isActive ? <CheckCircle2 className="w-3 h-3 text-emerald-600" /> : <XCircle className="w-3 h-3 text-slate-400" />}
+                            </button>
+                            <button
+                              onClick={() => handleOpenEditFormula(f)}
+                              className="p-1 hover:text-amber-600 hover:bg-white rounded border border-transparent hover:border-slate-200 transition-colors"
+                              title="Editar receta"
+                            >
+                              <Edit className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteFormula(f.id, f.name)}
+                              className="p-1 hover:text-rose-600 hover:bg-white rounded border border-transparent hover:border-slate-200 transition-colors"
+                              title="Eliminar receta"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
               </div>
 
               {/* Form de Agregar Receta */}
-              <div className="mt-8 pt-6 border-t border-slate-100">
-                <h4 className="text-sm font-semibold text-slate-900 mb-3">Formular Nueva Receta (BOM)</h4>
+              <div className="mt-6 pt-5 border-t border-slate-100">
+                <h4 className="text-xs font-bold uppercase text-slate-700 mb-3 flex items-center">
+                  <Plus className="w-3.5 h-3.5 mr-1 text-cyan-600" /> Formular Nueva Receta (BOM)
+                </h4>
                 <form onSubmit={handleCreateFormula} className="space-y-3">
                   <input
                     type="text"
@@ -783,7 +1174,7 @@ export default function ProductionRole({ onBack, currentUser, activeTab: propsAc
 
                   <button
                     type="submit"
-                    className="w-full bg-slate-900 text-white font-bold text-xs py-2 rounded"
+                    className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs py-2 rounded transition-all shadow-xs"
                   >
                     Resguardar Nueva Fórmula
                   </button>
@@ -798,22 +1189,64 @@ export default function ProductionRole({ onBack, currentUser, activeTab: propsAc
                 if (!formula) return <p className="text-slate-400 text-sm">Selecciona una receta para ver sus componentes.</p>;
 
                 const totalBOMCost = getFormulaCost(formula);
+                const isActive = formula.active !== false;
 
                 return (
                   <div className="space-y-6">
-                    <div className="flex justify-between items-start border-b border-slate-100 pb-4">
+                    <div className="flex flex-col sm:flex-row justify-between items-start gap-4 border-b border-slate-100 pb-4">
                       <div>
-                        <span className="text-xs bg-cyan-100 text-cyan-800 font-bold px-2.5 py-0.5 rounded-full uppercase">
-                          Garantía de Calidad Repostería
-                        </span>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-xs bg-cyan-100 text-cyan-800 font-bold px-2.5 py-0.5 rounded-full uppercase">
+                            Garantía de Calidad Repostería
+                          </span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                            isActive ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-300'
+                          }`}>
+                            {isActive ? '● Activa' : '○ Inactiva'}
+                          </span>
+                        </div>
                         <h2 className="text-lg font-bold text-slate-900 mt-2">{formula.name}</h2>
                         <p className="text-xs text-slate-500 mt-1">{formula.description}</p>
                       </div>
-                      <div className="text-right">
-                        <span className="text-xs text-slate-500 font-semibold uppercase block">Costo Total (Lote 100kg)</span>
-                        <span className="text-2xl font-black text-slate-900">${totalBOMCost.toLocaleString('es-MX')} MXN</span>
-                        <span className="text-xs text-slate-500 block">Costo Unitario por kg: ${(totalBOMCost / 100).toFixed(2)} MXN</span>
-                        <span className="text-xs text-cyan-600 block font-semibold">Costo por Bolsa 1kg: ${(totalBOMCost / 100).toFixed(2)} MXN</span>
+
+                      <div className="flex flex-col items-end gap-3">
+                        <div className="text-right">
+                          <span className="text-xs text-slate-500 font-semibold uppercase block">Costo Total (Lote 100kg)</span>
+                          <span className="text-2xl font-black text-slate-900">${totalBOMCost.toLocaleString('es-MX')} MXN</span>
+                          <span className="text-xs text-slate-500 block">Costo Unitario por kg: ${(totalBOMCost / 100).toFixed(2)} MXN</span>
+                          <span className="text-xs text-cyan-600 block font-semibold">Costo por Bolsa 1kg: ${(totalBOMCost / 100).toFixed(2)} MXN</span>
+                        </div>
+
+                        {/* Direct action buttons in BOM View */}
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => handleOpenViewFormula(formula)}
+                            className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition-all"
+                          >
+                            <Eye className="w-3.5 h-3.5" /> Ver Ficha
+                          </button>
+                          <button
+                            onClick={() => handleToggleFormulaActive(formula)}
+                            className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition-all border ${
+                              isActive ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                            }`}
+                          >
+                            {isActive ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+                            {isActive ? 'Desactivar' : 'Activar'}
+                          </button>
+                          <button
+                            onClick={() => handleOpenEditFormula(formula)}
+                            className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-semibold px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition-all"
+                          >
+                            <Edit className="w-3.5 h-3.5" /> Editar
+                          </button>
+                          <button
+                            onClick={() => handleDeleteFormula(formula.id, formula.name)}
+                            className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-semibold px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition-all"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" /> Eliminar
+                          </button>
+                        </div>
                       </div>
                     </div>
 
@@ -1373,6 +1806,487 @@ export default function ProductionRole({ onBack, currentUser, activeTab: propsAc
           </div>
         );
       })()}
+
+      {/* MODAL: VER DETALLE DE RECETA / FÓRMULA */}
+      {showViewFormulaModal && viewingFormula && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col border border-slate-200 overflow-hidden my-auto">
+            <div className="bg-slate-900 text-white p-4 sm:p-5 flex justify-between items-center shrink-0">
+              <div className="flex items-center space-x-2">
+                <Beaker className="w-5 h-5 text-cyan-400" />
+                <div>
+                  <h3 className="font-bold text-sm">Ficha Técnica de Receta</h3>
+                  <p className="text-[10px] text-slate-400">ID: {viewingFormula.id}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => { setShowViewFormulaModal(false); setViewingFormula(null); }}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-4 text-xs flex-1">
+              <div className="flex justify-between items-start bg-slate-50 p-4 rounded-xl border border-slate-200">
+                <div>
+                  <h4 className="text-base font-bold text-slate-900">{viewingFormula.name}</h4>
+                  <p className="text-xs text-slate-600 mt-1">{viewingFormula.description || 'Sin descripción'}</p>
+                  <p className="text-[11px] text-slate-500 mt-1">Lote Estándar: <b>{viewingFormula.batchSizeLiters || 100} kg/Litros</b></p>
+                </div>
+                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${
+                  viewingFormula.active !== false ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-300'
+                }`}>
+                  {viewingFormula.active !== false ? '● Activa' : '○ Inactiva'}
+                </span>
+              </div>
+
+              <div>
+                <h5 className="font-bold text-slate-800 uppercase text-[10px] tracking-wider mb-2">Ingredientes & Proporciones</h5>
+                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-100 font-semibold text-slate-700 border-b border-slate-200">
+                        <th className="p-2.5">Insumo</th>
+                        <th className="p-2.5 text-center">Porcentaje (%)</th>
+                        <th className="p-2.5 text-center">Cantidad Estándar</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {viewingFormula.ingredients?.map((ing, idx) => {
+                        const mat = materials.find(m => m.id === ing.materialId);
+                        return (
+                          <tr key={idx} className="hover:bg-slate-50">
+                            <td className="p-2.5 font-semibold text-slate-800">{mat?.name || ing.materialId}</td>
+                            <td className="p-2.5 text-center font-mono font-bold text-cyan-600">{ing.percentage}%</td>
+                            <td className="p-2.5 text-center font-mono">{ing.amountPerThousandLiters} {mat?.unit || 'kg'}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs">
+                <div>
+                  <span className="text-slate-500 block">Costo Mano de Obra:</span>
+                  <span className="font-bold text-slate-900 font-mono">${(viewingFormula.laborCost || 0).toLocaleString('es-MX')}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block">Gastos Indirectos:</span>
+                  <span className="font-bold text-slate-900 font-mono">${(viewingFormula.otherCost || 0).toLocaleString('es-MX')}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2 shrink-0">
+              <button
+                onClick={() => {
+                  setShowViewFormulaModal(false);
+                  handleOpenEditFormula(viewingFormula);
+                }}
+                className="bg-amber-500 hover:bg-amber-600 text-white font-bold px-4 py-2 rounded-lg text-xs transition-all flex items-center gap-1"
+              >
+                <Edit className="w-3.5 h-3.5" /> Editar
+              </button>
+              <button
+                onClick={() => { setShowViewFormulaModal(false); setViewingFormula(null); }}
+                className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-4 py-2 rounded-lg text-xs transition-all"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: EDITAR RECETA / FÓRMULA */}
+      {showEditFormulaModal && editingFormula && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col border border-slate-200 overflow-hidden my-auto">
+            <div className="bg-slate-900 text-white p-4 sm:p-5 flex justify-between items-center shrink-0">
+              <div className="flex items-center space-x-2">
+                <Edit className="w-5 h-5 text-amber-400" />
+                <div>
+                  <h3 className="font-bold text-sm">Editar Receta de Producción</h3>
+                  <p className="text-[10px] text-slate-400">ID: {editingFormula.id}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => { setShowEditFormulaModal(false); setEditingFormula(null); }}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditFormula} className="flex flex-col flex-1 overflow-hidden">
+              <div className="p-6 overflow-y-auto space-y-4 text-xs flex-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Nombre del Producto / Receta *</label>
+                    <input
+                      type="text"
+                      value={editFormulaName}
+                      onChange={(e) => setEditFormulaName(e.target.value)}
+                      required
+                      className="w-full p-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500 font-semibold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Estatus</label>
+                    <select
+                      value={editFormulaActive ? 'active' : 'inactive'}
+                      onChange={(e) => setEditFormulaActive(e.target.value === 'active')}
+                      className="w-full p-2 bg-white border border-slate-300 rounded-lg font-semibold"
+                    >
+                      <option value="active">Activa (Disponible para producción)</option>
+                      <option value="inactive">Inactiva (Archivada / Desactivada)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Descripción / Especificaciones</label>
+                  <textarea
+                    value={editFormulaDesc}
+                    onChange={(e) => setEditFormulaDesc(e.target.value)}
+                    rows={2}
+                    className="w-full p-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500"
+                  />
+                </div>
+
+                {/* Ingredientes en Edición */}
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <label className="block font-bold text-slate-700 uppercase text-[10px]">Ingredientes & Porcentajes (%)</label>
+                    <button
+                      type="button"
+                      onClick={() => setEditFormulaIngredients([...editFormulaIngredients, { materialId: materials[0]?.id || 'mat-1', percentage: 0 }])}
+                      className="text-cyan-600 hover:text-cyan-800 text-[11px] font-bold"
+                    >
+                      + Agregar Insumo
+                    </button>
+                  </div>
+
+                  {editFormulaIngredients.map((ing, idx) => (
+                    <div key={idx} className="flex gap-2 items-center">
+                      <select
+                        value={ing.materialId}
+                        onChange={(e) => {
+                          const updated = [...editFormulaIngredients];
+                          updated[idx].materialId = e.target.value;
+                          setEditFormulaIngredients(updated);
+                        }}
+                        className="w-3/5 p-2 text-xs bg-white border border-slate-300 rounded-lg"
+                      >
+                        {materials.map(m => (
+                          <option key={m.id} value={m.id}>{m.name} ({m.unit})</option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        placeholder="%"
+                        value={ing.percentage}
+                        onChange={(e) => {
+                          const updated = [...editFormulaIngredients];
+                          updated[idx].percentage = Number(e.target.value);
+                          setEditFormulaIngredients(updated);
+                        }}
+                        className="w-1/4 p-2 text-xs bg-white border border-slate-300 rounded-lg font-mono font-bold text-center"
+                        min="0"
+                        max="100"
+                        step="0.1"
+                      />
+                      <span className="text-xs text-slate-500">%</span>
+                      <button
+                        type="button"
+                        onClick={() => setEditFormulaIngredients(editFormulaIngredients.filter((_, i) => i !== idx))}
+                        className="p-1.5 text-rose-500 hover:bg-rose-50 rounded"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+
+                  <div className="text-right text-[11px] font-bold text-slate-600 pt-1">
+                    Total Porcentajes: <span className={editFormulaIngredients.reduce((a, b) => a + b.percentage, 0) === 100 ? 'text-emerald-600' : 'text-amber-600'}>
+                      {editFormulaIngredients.reduce((a, b) => a + b.percentage, 0).toFixed(1)}%
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase">Mano de Obra ($)</label>
+                    <input
+                      type="number"
+                      value={editFormulaLabor}
+                      onChange={(e) => setEditFormulaLabor(Number(e.target.value))}
+                      className="w-full p-2 text-xs bg-white border border-slate-300 rounded-lg font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 uppercase">Gastos Indirectos ($)</label>
+                    <input
+                      type="number"
+                      value={editFormulaOther}
+                      onChange={(e) => setEditFormulaOther(Number(e.target.value))}
+                      className="w-full p-2 text-xs bg-white border border-slate-300 rounded-lg font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => { setShowEditFormulaModal(false); setEditingFormula(null); }}
+                  className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-4 py-2 rounded-lg text-xs transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="bg-cyan-600 hover:bg-cyan-700 text-white font-bold px-5 py-2 rounded-lg text-xs transition-all shadow-sm"
+                >
+                  Guardar Cambios
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: VER DETALLE DE ORDEN DE PRODUCCIÓN */}
+      {showViewOrderModal && viewingOrder && (() => {
+        const formula = formulas.find(f => f.id === viewingOrder.formulaId);
+        return (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50 animate-fade-in">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col border border-slate-200 overflow-hidden my-auto">
+              <div className="bg-slate-900 text-white p-4 sm:p-5 flex justify-between items-center shrink-0">
+                <div className="flex items-center space-x-2">
+                  <ClipboardList className="w-5 h-5 text-cyan-400" />
+                  <div>
+                    <h3 className="font-bold text-sm">Detalle de Orden de Producción</h3>
+                    <p className="text-[10px] text-slate-400">Folio: {viewingOrder.id}</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => { setShowViewOrderModal(false); setViewingOrder(null); }}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-6 overflow-y-auto space-y-4 text-xs flex-1">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                  <div>
+                    <span className="text-slate-400 block text-[10px] uppercase font-semibold">Receta / Producto</span>
+                    <span className="font-bold text-slate-900 text-sm">{formula?.name || 'Receta'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px] uppercase font-semibold">Volumen</span>
+                    <span className="font-bold text-slate-900 text-sm">{viewingOrder.quantityLiters} Litros / kg</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px] uppercase font-semibold">Estatus</span>
+                    <span className="font-bold uppercase text-xs px-2 py-0.5 rounded bg-white border inline-block mt-0.5">{viewingOrder.status}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px] uppercase font-semibold">Operador</span>
+                    <span className="font-bold text-slate-900">{viewingOrder.operator}</span>
+                  </div>
+                </div>
+
+                {viewingOrder.notes && (
+                  <div className="bg-amber-50 border border-amber-200 p-3 rounded-lg">
+                    <span className="text-[10px] uppercase font-bold text-amber-800 block">Notas de Fabricación</span>
+                    <p className="text-slate-700 mt-0.5">{viewingOrder.notes}</p>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">Fecha de Creación:</span>
+                    <span className="font-semibold text-slate-800">{new Date(viewingOrder.createdAt).toLocaleString('es-MX')}</span>
+                  </div>
+                  {viewingOrder.completedAt && (
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">Fecha de Cierre:</span>
+                      <span className="font-semibold text-slate-800">{new Date(viewingOrder.completedAt).toLocaleString('es-MX')}</span>
+                    </div>
+                  )}
+                  {viewingOrder.lote && (
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">Número de Lote Asignado:</span>
+                      <span className="font-mono font-bold text-purple-900">{viewingOrder.lote}</span>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">Registro Activo:</span>
+                    <span className={`font-bold ${viewingOrder.active !== false ? 'text-emerald-600' : 'text-slate-500'}`}>
+                      {viewingOrder.active !== false ? 'Activo' : 'Inactivo / Archivado'}
+                    </span>
+                  </div>
+                </div>
+
+                {viewingOrder.qaResults && (
+                  <div className="border border-indigo-200 bg-indigo-50/50 p-4 rounded-xl space-y-2">
+                    <h5 className="font-bold text-indigo-900 text-xs flex items-center">
+                      <FileCheck className="w-4 h-4 mr-1.5 text-indigo-600" /> Resultados de Calidad (QA)
+                    </h5>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>pH Medido: <b>{viewingOrder.qaResults.ph}</b></div>
+                      <div>Densidad: <b>{viewingOrder.qaResults.density} g/cm³</b></div>
+                      <div>Sensorial: <b>{viewingOrder.qaResults.sensoryPassed ? '✓ Aprobado' : '✗ No'}</b></div>
+                      <div>Sellado: <b>{viewingOrder.qaResults.sealingPassed ? '✓ Aprobado' : '✗ No'}</b></div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2 shrink-0">
+                <button
+                  onClick={() => {
+                    setShowViewOrderModal(false);
+                    handleOpenEditOrder(viewingOrder);
+                  }}
+                  className="bg-amber-500 hover:bg-amber-600 text-white font-bold px-4 py-2 rounded-lg text-xs transition-all flex items-center gap-1"
+                >
+                  <Edit className="w-3.5 h-3.5" /> Editar
+                </button>
+                <button
+                  onClick={() => { setShowViewOrderModal(false); setViewingOrder(null); }}
+                  className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-4 py-2 rounded-lg text-xs transition-all"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* MODAL: EDITAR ORDEN DE PRODUCCIÓN */}
+      {showEditOrderModal && editingOrder && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-xl w-full max-h-[90vh] flex flex-col border border-slate-200 overflow-hidden my-auto">
+            <div className="bg-slate-900 text-white p-4 sm:p-5 flex justify-between items-center shrink-0">
+              <div className="flex items-center space-x-2">
+                <Edit className="w-5 h-5 text-amber-400" />
+                <div>
+                  <h3 className="font-bold text-sm">Editar Orden de Producción</h3>
+                  <p className="text-[10px] text-slate-400">Folio: {editingOrder.id}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => { setShowEditOrderModal(false); setEditingOrder(null); }}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditOrder} className="flex flex-col flex-1 overflow-hidden">
+              <div className="p-6 overflow-y-auto space-y-4 text-xs flex-1">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Receta / Producto *</label>
+                  <select
+                    value={editOrderFormulaId}
+                    onChange={(e) => setEditOrderFormulaId(e.target.value)}
+                    required
+                    className="w-full p-2 bg-white border border-slate-300 rounded-lg font-semibold"
+                  >
+                    {formulas.map(f => (
+                      <option key={f.id} value={f.id}>{f.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Volumen a Producir (Litros / kg)</label>
+                    <input
+                      type="number"
+                      value={editOrderQty}
+                      onChange={(e) => setEditOrderQty(Number(e.target.value))}
+                      required
+                      min="1"
+                      className="w-full p-2 bg-white border border-slate-300 rounded-lg font-mono font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Estatus de la Orden</label>
+                    <select
+                      value={editOrderStatus}
+                      onChange={(e) => setEditOrderStatus(e.target.value as any)}
+                      className="w-full p-2 bg-white border border-slate-300 rounded-lg font-semibold"
+                    >
+                      <option value="pending">Pendiente (Pre-chequeo)</option>
+                      <option value="in_progress">En Mezcla / Dosificación</option>
+                      <option value="completed">Completada</option>
+                      <option value="cancelled">Cancelada</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Operador Asignado</label>
+                    <input
+                      type="text"
+                      value={editOrderOperator}
+                      onChange={(e) => setEditOrderOperator(e.target.value)}
+                      className="w-full p-2 bg-white border border-slate-300 rounded-lg font-semibold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Visibilidad / Estatus Registro</label>
+                    <select
+                      value={editOrderActive ? 'active' : 'inactive'}
+                      onChange={(e) => setEditOrderActive(e.target.value === 'active')}
+                      className="w-full p-2 bg-white border border-slate-300 rounded-lg font-semibold"
+                    >
+                      <option value="active">Activa (Visible)</option>
+                      <option value="inactive">Inactiva (Archivada)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Notas / Observaciones</label>
+                  <textarea
+                    value={editOrderNotes}
+                    onChange={(e) => setEditOrderNotes(e.target.value)}
+                    rows={3}
+                    placeholder="Instrucciones adicionales para la mezcla..."
+                    className="w-full p-2 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-500"
+                  />
+                </div>
+              </div>
+
+              <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => { setShowEditOrderModal(false); setEditingOrder(null); }}
+                  className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-4 py-2 rounded-lg text-xs transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="bg-cyan-600 hover:bg-cyan-700 text-white font-bold px-5 py-2 rounded-lg text-xs transition-all shadow-sm"
+                >
+                  Guardar Cambios
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );
