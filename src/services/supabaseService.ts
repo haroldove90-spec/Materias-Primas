@@ -1474,6 +1474,49 @@ export async function deletePurchaseOrderInSupabase(poId: string): Promise<{ suc
 // HOJAS DE TRASLADO (TRANSFER SHEETS) CRUD & SYNC
 // ==============================================================================
 
+export async function fetchTransferSheetsFromSupabase(): Promise<{ success: boolean; data?: TransferSheet[]; error?: string }> {
+  try {
+    const { data, error } = await supabase
+      .from('transfer_sheets')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const formatted: TransferSheet[] = (data || []).map((ts: any) => ({
+      id: ts.id,
+      folio: ts.folio,
+      date: ts.date,
+      expeditedIn: ts.expedited_in || '',
+      elaboratedBy: ts.elaborated_by || '',
+      clientName: ts.client_name,
+      destination: ts.destination || '',
+      address: ts.address || '',
+      cp: ts.cp || '',
+      colonia: ts.colonia || '',
+      fiscalRegimen: ts.fiscal_regimen || '',
+      phone: ts.phone || '',
+      clientNo: ts.client_no || '',
+      rfc: ts.rfc || '',
+      curp: ts.curp || '',
+      paymentForm: ts.payment_form || '',
+      operator: ts.operator || '',
+      plateNo: ts.plate_no || '',
+      items: Array.isArray(ts.items) ? ts.items : [],
+      subtotal: Number(ts.subtotal || 0),
+      tax: Number(ts.tax || 0),
+      total: Number(ts.total || 0),
+      notes: ts.notes || '',
+      createdAt: ts.created_at || new Date().toISOString(),
+      active: ts.active !== undefined ? Boolean(ts.active) : true
+    }));
+
+    return { success: true, data: formatted };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Error al obtener hojas de traslado' };
+  }
+}
+
 export async function saveTransferSheetToSupabase(ts: TransferSheet): Promise<{ success: boolean; error?: string }> {
   try {
     const { error } = await supabase.from('transfer_sheets').upsert({
@@ -1523,6 +1566,37 @@ export async function deleteTransferSheetInSupabase(tsId: string): Promise<{ suc
 // ==============================================================================
 // NOTAS DE VENTA (SALE NOTES) CRUD & SYNC
 // ==============================================================================
+
+export async function fetchSaleNotesFromSupabase(): Promise<{ success: boolean; data?: SaleNote[]; error?: string }> {
+  try {
+    const { data, error } = await supabase
+      .from('sale_notes')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const formatted: SaleNote[] = (data || []).map((sn: any) => ({
+      id: sn.id,
+      noteNo: sn.note_no,
+      date: sn.date,
+      clientName: sn.client_name,
+      phone: sn.phone || '',
+      city: sn.city || '',
+      items: Array.isArray(sn.items) ? sn.items : [],
+      subtotal: Number(sn.subtotal || 0),
+      tax: Number(sn.tax || 0),
+      total: Number(sn.total || 0),
+      notes: sn.notes || '',
+      createdAt: sn.created_at || new Date().toISOString(),
+      active: sn.active !== undefined ? Boolean(sn.active) : true
+    }));
+
+    return { success: true, data: formatted };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Error al obtener notas de venta' };
+  }
+}
 
 export async function saveSaleNoteToSupabase(sn: SaleNote): Promise<{ success: boolean; error?: string }> {
   try {

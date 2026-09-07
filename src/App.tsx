@@ -134,6 +134,8 @@ export default function App() {
       { id: 'analytics', label: 'Dashboard', shortLabel: 'Dashboard', icon: BarChart3 },
       { id: 'finances', label: 'Finanzas y Crédito', shortLabel: 'Finanzas', icon: DollarSign },
       { id: 'clients', label: 'Clientes', shortLabel: 'Clientes', icon: Users },
+      { id: 'notas', label: 'Notas de Venta', shortLabel: 'Notas', icon: Receipt },
+      { id: 'traslado', label: 'Hojas de Traslado', shortLabel: 'Traslado', icon: FileText },
       { id: 'suppliers', label: 'Proveedores', shortLabel: 'Proveedores', icon: Truck },
       { id: 'raw_materials', label: 'Inventario Primas', shortLabel: 'Mat. Primas', icon: Package },
       { id: 'employees', label: 'Empleados y Accesos', shortLabel: 'Personal', icon: Shield },
