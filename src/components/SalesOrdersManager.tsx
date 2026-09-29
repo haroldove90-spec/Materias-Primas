@@ -150,7 +150,7 @@ export const SalesOrdersManager: React.FC<SalesOrdersManagerProps> = ({ currentU
       countBefore: currentSales.length,
       countAfter: updated.length,
       status: 'success',
-      payloadSummary: `Cliente: ${updatedSale.clientName} • Estatus: ${updatedSale.status} • Total: $${updatedSale.total.toFixed(2)}`,
+      payloadSummary: `Cliente: ${updatedSale.clientName} • Estatus: ${updatedSale.status} • Total: $${Number(updatedSale.total || 0).toFixed(2)}`,
       source: 'cloud_sync'
     });
 
@@ -642,8 +642,8 @@ export const SalesOrdersManager: React.FC<SalesOrdersManagerProps> = ({ currentU
                         <tr key={idx}>
                           <td className="py-2 px-3 font-bold text-slate-700">{it.quantity} {it.unit}</td>
                           <td className="py-2 px-3 font-medium text-slate-800">{it.productName}</td>
-                          <td className="py-2 px-3 text-right text-slate-600">${it.unitPrice.toFixed(2)}</td>
-                          <td className="py-2 px-3 text-right font-bold text-slate-900">${it.total.toFixed(2)}</td>
+                          <td className="py-2 px-3 text-right text-slate-600">${Number(it.unitPrice || 0).toFixed(2)}</td>
+                          <td className="py-2 px-3 text-right font-bold text-slate-900">${Number(it.total || 0).toFixed(2)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -655,15 +655,15 @@ export const SalesOrdersManager: React.FC<SalesOrdersManagerProps> = ({ currentU
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-1.5 text-right text-xs">
                 <div className="flex justify-between text-slate-600">
                   <span>Subtotal:</span>
-                  <span className="font-semibold">${selectedSale.subtotal.toFixed(2)} MXN</span>
+                  <span className="font-semibold">${Number(selectedSale.subtotal || 0).toFixed(2)} MXN</span>
                 </div>
                 <div className="flex justify-between text-slate-600">
                   <span>IVA (16%):</span>
-                  <span className="font-semibold">${selectedSale.tax.toFixed(2)} MXN</span>
+                  <span className="font-semibold">${Number(selectedSale.tax || 0).toFixed(2)} MXN</span>
                 </div>
                 <div className="flex justify-between text-base font-black text-slate-900 pt-2 border-t border-slate-200">
                   <span>Total General:</span>
-                  <span className="text-purple-700">${selectedSale.total.toFixed(2)} MXN</span>
+                  <span className="text-purple-700">${Number(selectedSale.total || 0).toFixed(2)} MXN</span>
                 </div>
               </div>
 
@@ -679,7 +679,7 @@ export const SalesOrdersManager: React.FC<SalesOrdersManagerProps> = ({ currentU
             <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-2.5 shrink-0">
               <button
                 onClick={() => {
-                  exportToPDF(`Comprobante_${selectedSale.id}`, ['Cant.', 'Producto', 'P. Unitario', 'Total'], selectedSale.items.map(i => [`${i.quantity} ${i.unit}`, i.productName, `$${i.unitPrice.toFixed(2)}`, `$${i.total.toFixed(2)}`]));
+                  exportToPDF(`Comprobante_${selectedSale.id}`, ['Cant.', 'Producto', 'P. Unitario', 'Total'], selectedSale.items.map(i => [`${i.quantity} ${i.unit}`, i.productName, `$${Number(i.unitPrice || 0).toFixed(2)}`, `$${Number(i.total || 0).toFixed(2)}`]));
                 }}
                 className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-xs"
                 title="Descargar Comprobante en archivo PDF"
@@ -718,14 +718,14 @@ export const SalesOrdersManager: React.FC<SalesOrdersManagerProps> = ({ currentU
                             <tr style="border-bottom: 1px solid #e2e8f0; background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
                               <td style="padding: 6px 7px; text-align: center;">${it.quantity} ${it.unit}</td>
                               <td style="padding: 6px 7px; font-weight: 600;">${it.productName}</td>
-                              <td style="padding: 6px 7px; text-align: right;">$${it.unitPrice.toFixed(2)}</td>
-                              <td style="padding: 6px 7px; text-align: right; font-weight: bold;">$${it.total.toFixed(2)}</td>
+                              <td style="padding: 6px 7px; text-align: right;">$${Number(it.unitPrice || 0).toFixed(2)}</td>
+                              <td style="padding: 6px 7px; text-align: right; font-weight: bold;">$${Number(it.total || 0).toFixed(2)}</td>
                             </tr>
                           `).join('')}
                         </tbody>
                       </table>
                       <div style="text-align: right; font-size: 14px; font-weight: 900; color: #1e3a8a; margin-bottom: 20px;">
-                        TOTAL: $${selectedSale.total.toFixed(2)} MXN
+                        TOTAL: $${Number(selectedSale.total || 0).toFixed(2)} MXN
                       </div>
                       <div style="border-top: 1px solid #cbd5e1; padding-top: 8px; text-align: center; font-size: 9px; color: #94a3b8;">
                         Documento emitido por MIAULOO ERP • San Juan del Río, Qro.

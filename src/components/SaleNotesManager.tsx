@@ -62,10 +62,25 @@ export function SaleNotesManager({ currentUser, onRefreshParent }: SaleNotesMana
     { pieces: 1, product: '', unitPrice: 0, total: 0 }
   ]);
 
+  // Helper to guarantee all numerical fields are clean JavaScript numbers
+  const normalizeNotes = (notesList: SaleNote[]): SaleNote[] => {
+    return (notesList || []).map(n => ({
+      ...n,
+      subtotal: Number(n.subtotal || 0),
+      total: Number(n.total || 0),
+      items: (n.items || []).map(it => ({
+        ...it,
+        pieces: Number(it.pieces || 0),
+        unitPrice: Number(it.unitPrice || 0),
+        total: Number(it.total || (Number(it.pieces || 0) * Number(it.unitPrice || 0)))
+      }))
+    }));
+  };
+
   // Load from local MockDatabase and synchronize with Supabase Cloud
   const loadData = async (showLoadingSpinner = false) => {
     if (showLoadingSpinner) setIsLoading(true);
-    const local = MockDatabase.getSaleNotes();
+    const local = normalizeNotes(MockDatabase.getSaleNotes());
     setNotes(local);
 
     try {
@@ -75,7 +90,7 @@ export function SaleNotesManager({ currentUser, onRefreshParent }: SaleNotesMana
         // Merge Supabase notes with local
         const mergedMap = new Map<string, SaleNote>();
         local.forEach(n => mergedMap.set(n.id, n));
-        res.data.forEach(sn => mergedMap.set(sn.id, sn));
+        normalizeNotes(res.data).forEach(sn => mergedMap.set(sn.id, sn));
         const merged = Array.from(mergedMap.values()).sort((a, b) => 
           new Date(b.date || b.createdAt).getTime() - new Date(a.date || a.createdAt).getTime()
         );
@@ -147,16 +162,19 @@ export function SaleNotesManager({ currentUser, onRefreshParent }: SaleNotesMana
   const handleUpdateEditingItem = (index: number, field: keyof SaleNoteItem, value: any) => {
     if (!editingNote) return;
     const updatedItems = [...editingNote.items];
-    const current = { ...updatedItems[index], [field]: value };
+    const current = { ...updatedItems[index] };
     
-    if (field === 'pieces' || field === 'unitPrice') {
-      const pzs = Number(field === 'pieces' ? value : current.pieces) || 0;
-      const price = Number(field === 'unitPrice' ? value : current.unitPrice) || 0;
-      current.total = pzs * price;
+    if (field === 'pieces') {
+      current.pieces = Number(value) || 0;
+    } else if (field === 'unitPrice') {
+      current.unitPrice = Number(value) || 0;
+    } else if (field === 'product') {
+      current.product = value;
     }
+    current.total = Number(current.pieces || 0) * Number(current.unitPrice || 0);
     
     updatedItems[index] = current;
-    const subtotal = updatedItems.reduce((acc, it) => acc + (it.total || 0), 0);
+    const subtotal = updatedItems.reduce((acc, it) => acc + (Number(it.total) || 0), 0);
     const total = subtotal; // IVA = 0 en notas estándar
 
     setEditingNote({
@@ -192,33 +210,45 @@ export function SaleNotesManager({ currentUser, onRefreshParent }: SaleNotesMana
       return;
     }
 
-    if (editingNote.items.some(i => !i.product.trim() || i.pieces <= 0)) {
+    if (editingNote.items.some(i => !i.product.trim() || Number(i.pieces || 0) <= 0)) {
       alert('Por favor verifique que todas las partidas tengan descripción y cantidad válida.');
       return;
     }
 
-    const updatedNotes = notes.map(n => n.id === editingNote.id ? editingNote : n);
+    const sanitizedNote: SaleNote = {
+      ...editingNote,
+      subtotal: Number(editingNote.subtotal || 0),
+      total: Number(editingNote.total || 0),
+      items: editingNote.items.map(it => ({
+        ...it,
+        pieces: Number(it.pieces || 0),
+        unitPrice: Number(it.unitPrice || 0),
+        total: Number(it.total || 0)
+      }))
+    };
+
+    const updatedNotes = notes.map(n => n.id === sanitizedNote.id ? sanitizedNote : n);
     MockDatabase.saveSaleNotes(updatedNotes);
     setNotes(updatedNotes);
 
     MockDatabase.addAuditLog(
       currentUser.name,
-      `Modificó Nota de Venta No. ${editingNote.noteNo}`,
+      `Modificó Nota de Venta No. ${sanitizedNote.noteNo}`,
       'Notas de Venta',
-      `Folio: ${editingNote.noteNo}, Cliente: ${editingNote.clientName}, Total: $${editingNote.total.toFixed(2)}`
+      `Folio: ${sanitizedNote.noteNo}, Cliente: ${sanitizedNote.clientName}, Total: $${Number(sanitizedNote.total || 0).toFixed(2)}`
     );
 
     // Sync to Supabase
     try {
-      await saveSaleNoteToSupabase(editingNote);
+      await saveSaleNoteToSupabase(sanitizedNote);
       recordSaveTelemetry({
         table: 'sale_notes',
-        folio: `NOTA-${editingNote.noteNo}`,
+        folio: `NOTA-${sanitizedNote.noteNo}`,
         action: 'Nota de Venta Modificada',
         countBefore: notes.length,
         countAfter: notes.length,
         status: 'success',
-        payloadSummary: `Cliente: ${editingNote.clientName} • Total: $${editingNote.total.toFixed(2)} (Actualizada)`,
+        payloadSummary: `Cliente: ${sanitizedNote.clientName} • Total: $${Number(sanitizedNote.total || 0).toFixed(2)} (Actualizada)`,
         source: 'cloud_sync'
       });
     } catch (err) {
@@ -322,12 +352,15 @@ export function SaleNotesManager({ currentUser, onRefreshParent }: SaleNotesMana
 
   const handleUpdateCreateItem = (index: number, field: keyof SaleNoteItem, value: any) => {
     const updated = [...createItems];
-    const current = { ...updated[index], [field]: value };
-    if (field === 'pieces' || field === 'unitPrice') {
-      const pzs = Number(field === 'pieces' ? value : current.pieces) || 0;
-      const price = Number(field === 'unitPrice' ? value : current.unitPrice) || 0;
-      current.total = pzs * price;
+    const current = { ...updated[index] };
+    if (field === 'pieces') {
+      current.pieces = Number(value) || 0;
+    } else if (field === 'unitPrice') {
+      current.unitPrice = Number(value) || 0;
+    } else if (field === 'product') {
+      current.product = value;
     }
+    current.total = Number(current.pieces || 0) * Number(current.unitPrice || 0);
     updated[index] = current;
     setCreateItems(updated);
   };
@@ -345,12 +378,19 @@ export function SaleNotesManager({ currentUser, onRefreshParent }: SaleNotesMana
       return;
     }
 
-    if (createItems.some(i => !i.product.trim() || i.pieces <= 0)) {
+    if (createItems.some(i => !i.product.trim() || Number(i.pieces || 0) <= 0)) {
       alert('Asegúrese de ingresar una descripción y cantidad para cada producto.');
       return;
     }
 
-    const subtotal = createItems.reduce((acc, it) => acc + (it.total || 0), 0);
+    const sanitizedItems = createItems.map(it => ({
+      pieces: Number(it.pieces || 0),
+      product: it.product.trim(),
+      unitPrice: Number(it.unitPrice || 0),
+      total: Number(it.pieces || 0) * Number(it.unitPrice || 0)
+    }));
+
+    const subtotal = sanitizedItems.reduce((acc, it) => acc + (it.total || 0), 0);
     const newNote: SaleNote = {
       id: `sn-${Date.now()}`,
       noteNo: createNoteNo,
@@ -358,7 +398,7 @@ export function SaleNotesManager({ currentUser, onRefreshParent }: SaleNotesMana
       clientName: createClientName,
       phone: createPhone,
       city: createCity,
-      items: createItems,
+      items: sanitizedItems,
       subtotal,
       tax: 0,
       total: subtotal,
@@ -375,7 +415,7 @@ export function SaleNotesManager({ currentUser, onRefreshParent }: SaleNotesMana
       currentUser.name,
       `Creó Nota de Venta No. ${createNoteNo}`,
       'Notas de Venta',
-      `Cliente: ${createClientName}, Total: $${subtotal.toFixed(2)}`
+      `Cliente: ${createClientName}, Total: $${Number(subtotal || 0).toFixed(2)}`
     );
 
     try {
@@ -387,7 +427,7 @@ export function SaleNotesManager({ currentUser, onRefreshParent }: SaleNotesMana
         countBefore: notes.length,
         countAfter: updated.length,
         status: 'success',
-        payloadSummary: `Cliente: ${createClientName} • Total: $${subtotal.toFixed(2)}`,
+        payloadSummary: `Cliente: ${createClientName} • Total: $${Number(subtotal || 0).toFixed(2)}`,
         source: 'cloud_sync'
       });
     } catch (err) {
@@ -870,10 +910,10 @@ export function SaleNotesManager({ currentUser, onRefreshParent }: SaleNotesMana
                   <tbody className="divide-y divide-slate-200 bg-white/80">
                     {selectedNote.items.map((it, idx) => (
                       <tr key={idx} className="hover:bg-slate-50">
-                        <td className="p-2 text-center border-r font-semibold">{it.pieces}</td>
-                        <td className="p-2 border-r font-bold uppercase text-slate-800">{it.product}</td>
-                        <td className="p-2 text-right border-r">${it.unitPrice.toFixed(2)}</td>
-                        <td className="p-2 text-right font-black text-slate-900">${it.total.toFixed(2)}</td>
+                        <td className="p-2 text-center border-r font-semibold">{it.pieces || 0}</td>
+                        <td className="p-2 border-r font-bold uppercase text-slate-800">{it.product || ''}</td>
+                        <td className="p-2 text-right border-r">${Number(it.unitPrice || 0).toFixed(2)}</td>
+                        <td className="p-2 text-right font-black text-slate-900">${Number(it.total || 0).toFixed(2)}</td>
                       </tr>
                     ))}
                     {Array.from({ length: Math.max(0, 5 - selectedNote.items.length) }).map((_, i) => (
@@ -893,7 +933,7 @@ export function SaleNotesManager({ currentUser, onRefreshParent }: SaleNotesMana
                 <div className="w-56 border border-[#1E3A8A] rounded divide-y divide-slate-200 text-xs">
                   <div className="p-1.5 flex justify-between font-semibold">
                     <span>SUBTOTAL:</span>
-                    <span>${selectedNote.subtotal.toFixed(2)}</span>
+                    <span>${Number(selectedNote.subtotal || 0).toFixed(2)}</span>
                   </div>
                   <div className="p-1.5 flex justify-between text-slate-500">
                     <span>IVA:</span>
@@ -901,7 +941,7 @@ export function SaleNotesManager({ currentUser, onRefreshParent }: SaleNotesMana
                   </div>
                   <div className="p-1.5 flex justify-between font-black text-sm bg-[#1E3A8A] text-white">
                     <span>TOTAL:</span>
-                    <span>${selectedNote.total.toFixed(2)}</span>
+                    <span>${Number(selectedNote.total || 0).toFixed(2)}</span>
                   </div>
                 </div>
               </div>
@@ -1123,7 +1163,7 @@ export function SaleNotesManager({ currentUser, onRefreshParent }: SaleNotesMana
                               />
                             </td>
                             <td className="p-2 text-right font-black text-slate-900">
-                              ${item.total.toFixed(2)}
+                              ${Number(item.total || 0).toFixed(2)}
                             </td>
                             <td className="p-2 text-center">
                               <button
@@ -1146,7 +1186,7 @@ export function SaleNotesManager({ currentUser, onRefreshParent }: SaleNotesMana
                     <div className="w-64 bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1.5">
                       <div className="flex justify-between font-medium text-slate-600">
                         <span>Subtotal:</span>
-                        <span>${editingNote.subtotal.toFixed(2)}</span>
+                        <span>${Number(editingNote.subtotal || 0).toFixed(2)}</span>
                       </div>
                       <div className="flex justify-between text-slate-400">
                         <span>IVA:</span>
@@ -1154,7 +1194,7 @@ export function SaleNotesManager({ currentUser, onRefreshParent }: SaleNotesMana
                       </div>
                       <div className="flex justify-between font-black text-slate-950 text-sm border-t border-slate-200 pt-1.5">
                         <span>TOTAL:</span>
-                        <span className="text-blue-900">${editingNote.total.toFixed(2)} MXN</span>
+                        <span className="text-blue-900">${Number(editingNote.total || 0).toFixed(2)} MXN</span>
                       </div>
                     </div>
                   </div>
@@ -1356,7 +1396,7 @@ export function SaleNotesManager({ currentUser, onRefreshParent }: SaleNotesMana
                               />
                             </td>
                             <td className="p-2 text-right font-black text-slate-900">
-                              ${item.total.toFixed(2)}
+                              ${Number(item.total || 0).toFixed(2)}
                             </td>
                             <td className="p-2 text-center">
                               {createItems.length > 1 && (
@@ -1380,7 +1420,7 @@ export function SaleNotesManager({ currentUser, onRefreshParent }: SaleNotesMana
                       <div className="flex justify-between font-black text-slate-950 text-sm">
                         <span>TOTAL:</span>
                         <span className="text-purple-900">
-                          ${createItems.reduce((acc, it) => acc + (it.total || 0), 0).toFixed(2)} MXN
+                          ${createItems.reduce((acc, it) => acc + (Number(it.total) || 0), 0).toFixed(2)} MXN
                         </span>
                       </div>
                     </div>
@@ -1424,7 +1464,7 @@ export function SaleNotesManager({ currentUser, onRefreshParent }: SaleNotesMana
                 ¿Eliminar Nota de Venta?
               </h3>
               <p className="text-xs text-slate-500 mt-1">
-                Está a punto de eliminar permanentemente la nota de venta <span className="font-bold text-slate-800">No. {deletingNote.noteNo}</span> correspondiente a <span className="font-bold text-slate-800">{deletingNote.clientName}</span> por un importe de <span className="font-bold text-slate-900">${deletingNote.total.toFixed(2)} MXN</span>.
+                Está a punto de eliminar permanentemente la nota de venta <span className="font-bold text-slate-800">No. {deletingNote.noteNo}</span> correspondiente a <span className="font-bold text-slate-800">{deletingNote.clientName}</span> por un importe de <span className="font-bold text-slate-900">${Number(deletingNote.total || 0).toFixed(2)} MXN</span>.
               </p>
             </div>
 

@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { MockDatabase } from '../data';
 import { RawMaterial, Client, Sale, OrderItem, DeliveryRoute, User, TransferSheet, TransferSheetItem, SaleNote, SaleNoteItem, AccountReceivable } from '../types';
-import { exportToExcel, exportToPDF } from '../utils/exportUtils';
+import { exportToExcel, exportToPDF, exportSaleNoteToPDF, printSaleNoteReceipt, exportTransferSheetToPDF, printElement } from '../utils/exportUtils';
 import { recordSaveTelemetry } from '../services/supabaseTelemetry';
 import { 
   saveRawMaterialToSupabase, 
@@ -822,12 +822,17 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
 
   const handleUpdateTsItem = (index: number, field: keyof TransferSheetItem, value: any) => {
     const updated = [...tsItems];
-    const item = { ...updated[index], [field]: value };
-    if (field === 'quantity' || field === 'unitPrice') {
-      const qty = Number(field === 'quantity' ? value : item.quantity) || 0;
-      const price = Number(field === 'unitPrice' ? value : item.unitPrice) || 0;
-      item.total = qty * price;
+    const item = { ...updated[index] };
+    if (field === 'quantity') {
+      item.quantity = Number(value) || 0;
+    } else if (field === 'unitPrice') {
+      item.unitPrice = Number(value) || 0;
+    } else if (field === 'unit') {
+      item.unit = value;
+    } else if (field === 'description') {
+      item.description = value;
     }
+    item.total = Number(item.quantity || 0) * Number(item.unitPrice || 0);
     updated[index] = item;
     setTsItems(updated);
   };
@@ -843,7 +848,15 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
       return;
     }
 
-    const subtotal = tsItems.reduce((acc, item) => acc + (item.total || 0), 0);
+    const sanitizedItems = tsItems.map(it => ({
+      quantity: Number(it.quantity || 0),
+      unit: it.unit || 'LTS',
+      description: it.description || '',
+      unitPrice: Number(it.unitPrice || 0),
+      total: Number(it.quantity || 0) * Number(it.unitPrice || 0)
+    }));
+
+    const subtotal = sanitizedItems.reduce((acc, item) => acc + (item.total || 0), 0);
     const tax = 0;
     const total = subtotal + tax;
 
@@ -866,7 +879,7 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
       paymentForm: tsPaymentForm,
       operator: tsOperator,
       plateNo: tsPlateNo,
-      items: tsItems,
+      items: sanitizedItems,
       subtotal,
       tax,
       total,
@@ -887,7 +900,7 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
       countBefore: prevSheetsCount,
       countAfter: prevSheetsCount + 1,
       status: 'success',
-      payloadSummary: `Destino: ${tsDestination} • Cliente: ${tsClientName} • Total: $${total.toFixed(2)}`,
+      payloadSummary: `Destino: ${tsDestination} • Cliente: ${tsClientName} • Total: $${Number(total || 0).toFixed(2)}`,
       source: 'cloud_sync'
     });
 
@@ -905,12 +918,15 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
 
   const handleUpdateSnItem = (index: number, field: keyof SaleNoteItem, value: any) => {
     const updated = [...snItems];
-    const item = { ...updated[index], [field]: value };
-    if (field === 'pieces' || field === 'unitPrice') {
-      const pzs = Number(field === 'pieces' ? value : item.pieces) || 0;
-      const price = Number(field === 'unitPrice' ? value : item.unitPrice) || 0;
-      item.total = pzs * price;
+    const item = { ...updated[index] };
+    if (field === 'pieces') {
+      item.pieces = Number(value) || 0;
+    } else if (field === 'unitPrice') {
+      item.unitPrice = Number(value) || 0;
+    } else if (field === 'product') {
+      item.product = value;
     }
+    item.total = Number(item.pieces || 0) * Number(item.unitPrice || 0);
     updated[index] = item;
     setSnItems(updated);
   };
@@ -926,7 +942,14 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
       return;
     }
 
-    const subtotal = snItems.reduce((acc, item) => acc + (item.total || 0), 0);
+    const sanitizedItems = snItems.map(it => ({
+      pieces: Number(it.pieces || 0),
+      product: it.product || '',
+      unitPrice: Number(it.unitPrice || 0),
+      total: Number(it.pieces || 0) * Number(it.unitPrice || 0)
+    }));
+
+    const subtotal = sanitizedItems.reduce((acc, item) => acc + (item.total || 0), 0);
     const tax = 0;
     const total = subtotal + tax;
 
@@ -937,7 +960,7 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
       clientName: snClientName,
       phone: snPhone,
       city: snCity,
-      items: snItems,
+      items: sanitizedItems,
       subtotal,
       tax,
       total,
@@ -957,7 +980,7 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
       countBefore: prevNotesCount,
       countAfter: prevNotesCount + 1,
       status: 'success',
-      payloadSummary: `Cliente: ${snClientName} • Ciudad: ${snCity} • Total: $${total.toFixed(2)}`,
+      payloadSummary: `Cliente: ${snClientName} • Ciudad: ${snCity} • Total: $${Number(total || 0).toFixed(2)}`,
       source: 'cloud_sync'
     });
     setSaleNotes(updated);
@@ -2044,12 +2067,20 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
                 <Truck className="w-4 h-4 mr-2 text-purple-400" />
                 Vista Previa Oficial: Hoja de Traslado {selectedTransferSheet.folio}
               </span>
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-2">
                 <button
-                  onClick={() => window.print()}
-                  className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold flex items-center transition-all shadow"
+                  onClick={() => exportTransferSheetToPDF(selectedTransferSheet)}
+                  className="bg-red-600 hover:bg-red-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center transition-all shadow cursor-pointer"
+                  title="Descargar Hoja de Traslado en PDF Oficial"
                 >
-                  <Printer className="w-4 h-4 mr-1.5" /> Exportar en PDF / Imprimir
+                  <Download className="w-3.5 h-3.5 mr-1.5" /> Descargar PDF
+                </button>
+                <button
+                  onClick={() => printElement('printable-transfer-sheet', `Hoja_Traslado_${selectedTransferSheet.folio}`)}
+                  className="bg-[#0B2545] hover:bg-[#133966] text-white px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center transition-all shadow cursor-pointer"
+                  title="Mandar a imprimir directamente a la impresora"
+                >
+                  <Printer className="w-4 h-4 mr-1.5" /> Imprimir
                 </button>
                 <button
                   onClick={() => setShowViewTransferModal(false)}
@@ -2151,8 +2182,8 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
                         <td className="p-2 text-center border-r font-medium">{it.quantity}</td>
                         <td className="p-2 text-center border-r font-medium uppercase">{it.unit}</td>
                         <td className="p-2 border-r font-semibold uppercase">{it.description}</td>
-                        <td className="p-2 text-right border-r">${it.unitPrice.toFixed(2)}</td>
-                        <td className="p-2 text-right font-bold">${it.total.toFixed(2)}</td>
+                        <td className="p-2 text-right border-r">${Number(it.unitPrice || 0).toFixed(2)}</td>
+                        <td className="p-2 text-right font-bold">${Number(it.total || 0).toFixed(2)}</td>
                       </tr>
                     ))}
                     {Array.from({ length: Math.max(0, 4 - selectedTransferSheet.items.length) }).map((_, i) => (
@@ -2172,7 +2203,7 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
                 <div className="w-64 border border-[#0B2545] divide-y divide-[#0B2545] text-[11px]">
                   <div className="p-1.5 flex justify-between font-bold">
                     <span>SUBTOTAL:</span>
-                    <span>${selectedTransferSheet.subtotal.toFixed(2)}</span>
+                    <span>${Number(selectedTransferSheet.subtotal || 0).toFixed(2)}</span>
                   </div>
                   <div className="p-1.5 flex justify-between">
                     <span>I.V.A:</span>
@@ -2180,7 +2211,7 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
                   </div>
                   <div className="p-1.5 flex justify-between font-black text-sm bg-slate-100 text-[#0B2545]">
                     <span>TOTAL:</span>
-                    <span>${selectedTransferSheet.total.toFixed(2)}</span>
+                    <span>${Number(selectedTransferSheet.total || 0).toFixed(2)}</span>
                   </div>
                 </div>
               </div>
@@ -2217,16 +2248,24 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
                 <Receipt className="w-4 h-4 mr-2 text-purple-400" />
                 Vista Previa Oficial: Nota de Venta No. {selectedSaleNote.noteNo}
               </span>
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-2">
                 <button
-                  onClick={() => window.print()}
-                  className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold flex items-center transition-all shadow"
+                  onClick={() => exportSaleNoteToPDF(selectedSaleNote)}
+                  className="bg-red-600 hover:bg-red-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center transition-all shadow cursor-pointer"
+                  title="Descargar Nota de Venta en PDF Oficial"
                 >
-                  <Printer className="w-4 h-4 mr-1.5" /> Exportar en PDF / Imprimir
+                  <Download className="w-3.5 h-3.5 mr-1.5" /> Descargar PDF
+                </button>
+                <button
+                  onClick={() => printSaleNoteReceipt(selectedSaleNote)}
+                  className="bg-[#1E3A8A] hover:bg-blue-900 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center transition-all shadow cursor-pointer"
+                  title="Mandar a imprimir directamente a la impresora"
+                >
+                  <Printer className="w-4 h-4 mr-1.5" /> Imprimir
                 </button>
                 <button
                   onClick={() => setShowViewNoteModal(false)}
-                  className="text-slate-400 hover:text-white p-1"
+                  className="text-slate-400 hover:text-white p-1 cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -2286,10 +2325,10 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
                   <tbody className="divide-y divide-slate-200 bg-white/80">
                     {selectedSaleNote.items.map((it, idx) => (
                       <tr key={idx} className="hover:bg-slate-50">
-                        <td className="p-2 text-center border-r font-semibold">{it.pieces}</td>
-                        <td className="p-2 border-r font-bold uppercase text-slate-800">{it.product}</td>
-                        <td className="p-2 text-right border-r">${it.unitPrice.toFixed(2)}</td>
-                        <td className="p-2 text-right font-black text-slate-900">${it.total.toFixed(2)}</td>
+                        <td className="p-2 text-center border-r font-semibold">{it.pieces || 0}</td>
+                        <td className="p-2 border-r font-bold uppercase text-slate-800">{it.product || ''}</td>
+                        <td className="p-2 text-right border-r">${Number(it.unitPrice || 0).toFixed(2)}</td>
+                        <td className="p-2 text-right font-black text-slate-900">${Number(it.total || 0).toFixed(2)}</td>
                       </tr>
                     ))}
                     {Array.from({ length: Math.max(0, 5 - selectedSaleNote.items.length) }).map((_, i) => (
@@ -2308,7 +2347,7 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
                 <div className="w-56 border border-[#1E3A8A] rounded divide-y divide-slate-200 text-xs">
                   <div className="p-1.5 flex justify-between font-semibold">
                     <span>SUBTOTAL:</span>
-                    <span>${selectedSaleNote.subtotal.toFixed(2)}</span>
+                    <span>${Number(selectedSaleNote.subtotal || 0).toFixed(2)}</span>
                   </div>
                   <div className="p-1.5 flex justify-between text-slate-500">
                     <span>IVA:</span>
@@ -2316,7 +2355,7 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
                   </div>
                   <div className="p-1.5 flex justify-between font-black text-sm bg-[#1E3A8A] text-white">
                     <span>TOTAL:</span>
-                    <span>${selectedSaleNote.total.toFixed(2)}</span>
+                    <span>${Number(selectedSaleNote.total || 0).toFixed(2)}</span>
                   </div>
                 </div>
               </div>

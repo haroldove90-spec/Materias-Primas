@@ -331,10 +331,10 @@ export function exportSaleNoteToPDF(note: SaleNote) {
 
   // Items Table
   const tableData = note.items.map(it => [
-    String(it.pieces),
-    it.product.toUpperCase(),
-    `$${it.unitPrice.toFixed(2)}`,
-    `$${it.total.toFixed(2)}`
+    String(it.pieces || 0),
+    (it.product || '').toUpperCase(),
+    `$${Number(it.unitPrice || 0).toFixed(2)}`,
+    `$${Number(it.total || 0).toFixed(2)}`
   ]);
 
   autoTable(doc, {
@@ -377,7 +377,7 @@ export function exportSaleNoteToPDF(note: SaleNote) {
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(71, 85, 105);
   doc.text('SUBTOTAL:', totalsBoxX + 4, totalsBoxY + 6);
-  doc.text(`$${note.subtotal.toFixed(2)}`, totalsBoxX + 57, totalsBoxY + 6, { align: 'right' });
+  doc.text(`$${Number(note.subtotal || 0).toFixed(2)}`, totalsBoxX + 57, totalsBoxY + 6, { align: 'right' });
 
   doc.text('IVA (0% / Exento):', totalsBoxX + 4, totalsBoxY + 12);
   doc.text('$0.00', totalsBoxX + 57, totalsBoxY + 12, { align: 'right' });
@@ -388,7 +388,7 @@ export function exportSaleNoteToPDF(note: SaleNote) {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10.5);
   doc.text('TOTAL:', totalsBoxX + 4, totalsBoxY + 21);
-  doc.text(`$${note.total.toFixed(2)}`, totalsBoxX + 57, totalsBoxY + 21, { align: 'right' });
+  doc.text(`$${Number(note.total || 0).toFixed(2)}`, totalsBoxX + 57, totalsBoxY + 21, { align: 'right' });
 
   // Notes if available
   if (note.notes) {
@@ -488,10 +488,10 @@ export function printSaleNoteReceipt(note: SaleNote) {
         <tbody>
           ${note.items.map((it, idx) => `
             <tr style="border-bottom: 1px solid #e2e8f0; background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
-              <td style="padding: 7px; text-align: center; border-right: 1px solid #e2e8f0; font-weight: 600;">${it.pieces}</td>
-              <td style="padding: 7px; border-right: 1px solid #e2e8f0; font-weight: 700; text-transform: uppercase;">${it.product}</td>
-              <td style="padding: 7px; text-align: right; border-right: 1px solid #e2e8f0;">$${it.unitPrice.toFixed(2)}</td>
-              <td style="padding: 7px; text-align: right; font-weight: 900; color: #0f172a;">$${it.total.toFixed(2)}</td>
+              <td style="padding: 7px; text-align: center; border-right: 1px solid #e2e8f0; font-weight: 600;">${it.pieces || 0}</td>
+              <td style="padding: 7px; border-right: 1px solid #e2e8f0; font-weight: 700; text-transform: uppercase;">${it.product || ''}</td>
+              <td style="padding: 7px; text-align: right; border-right: 1px solid #e2e8f0;">$${Number(it.unitPrice || 0).toFixed(2)}</td>
+              <td style="padding: 7px; text-align: right; font-weight: 900; color: #0f172a;">$${Number(it.total || 0).toFixed(2)}</td>
             </tr>
           `).join('')}
         </tbody>
@@ -510,7 +510,7 @@ export function printSaleNoteReceipt(note: SaleNote) {
         <div style="width: 220px; border: 1px solid #1E3A8A; border-radius: 4px; overflow: hidden; font-size: 11px;">
           <div style="display: flex; justify-content: space-between; padding: 6px 10px; border-bottom: 1px solid #e2e8f0;">
             <span style="font-weight: 600;">SUBTOTAL:</span>
-            <span>$${note.subtotal.toFixed(2)}</span>
+            <span>$${Number(note.subtotal || 0).toFixed(2)}</span>
           </div>
           <div style="display: flex; justify-content: space-between; padding: 6px 10px; border-bottom: 1px solid #e2e8f0; color: #64748b;">
             <span>IVA:</span>
@@ -518,7 +518,7 @@ export function printSaleNoteReceipt(note: SaleNote) {
           </div>
           <div style="display: flex; justify-content: space-between; padding: 8px 10px; background: #1E3A8A; color: white; font-weight: 900; font-size: 13px;">
             <span>TOTAL:</span>
-            <span>$${note.total.toFixed(2)}</span>
+            <span>$${Number(note.total || 0).toFixed(2)}</span>
           </div>
         </div>
       </div>
@@ -626,8 +626,8 @@ export function exportTransferSheetToPDF(sheet: TransferSheet) {
   const tableData = sheet.items.map(it => [
     `${it.quantity} ${it.unit}`,
     it.description,
-    it.unitPrice ? `$${it.unitPrice.toFixed(2)}` : 'S/P',
-    it.total ? `$${it.total.toFixed(2)}` : 'S/P'
+    it.unitPrice !== undefined && it.unitPrice !== null ? `$${Number(it.unitPrice || 0).toFixed(2)}` : 'S/P',
+    it.total !== undefined && it.total !== null ? `$${Number(it.total || 0).toFixed(2)}` : 'S/P'
   ]);
 
   autoTable(doc, {
@@ -654,7 +654,7 @@ export function exportTransferSheetToPDF(sheet: TransferSheet) {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(11, 37, 69);
-  doc.text(`TOTAL TRASLADO: $${sheet.total.toFixed(2)}`, pageWidth - 16, finalY + 10, { align: 'right' });
+  doc.text(`TOTAL TRASLADO: $${Number(sheet.total || 0).toFixed(2)}`, pageWidth - 16, finalY + 10, { align: 'right' });
 
   doc.save(`Hoja_Traslado_${sheet.folio.replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`);
 }

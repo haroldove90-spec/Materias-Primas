@@ -73,10 +73,25 @@ export function TransferSheetsManager({ currentUser, onRefreshParent }: Transfer
     { quantity: 10, unit: 'LTS', description: '', unitPrice: 0, total: 0 }
   ]);
 
+  // Helper to guarantee all numerical fields are clean JavaScript numbers
+  const normalizeSheets = (sheetsList: TransferSheet[]): TransferSheet[] => {
+    return (sheetsList || []).map(s => ({
+      ...s,
+      subtotal: Number(s.subtotal || 0),
+      total: Number(s.total || 0),
+      items: (s.items || []).map(it => ({
+        ...it,
+        quantity: Number(it.quantity || 0),
+        unitPrice: Number(it.unitPrice || 0),
+        total: Number(it.total || (Number(it.quantity || 0) * Number(it.unitPrice || 0)))
+      }))
+    }));
+  };
+
   // Load from local MockDatabase and synchronize with Supabase Cloud
   const loadData = async (showLoadingSpinner = false) => {
     if (showLoadingSpinner) setIsLoading(true);
-    const local = MockDatabase.getTransferSheets();
+    const local = normalizeSheets(MockDatabase.getTransferSheets());
     setSheets(local);
 
     try {
@@ -85,7 +100,7 @@ export function TransferSheetsManager({ currentUser, onRefreshParent }: Transfer
       if (res.success && res.data && res.data.length > 0) {
         const mergedMap = new Map<string, TransferSheet>();
         local.forEach(s => mergedMap.set(s.id, s));
-        res.data.forEach(ts => mergedMap.set(ts.id, ts));
+        normalizeSheets(res.data).forEach(ts => mergedMap.set(ts.id, ts));
         const merged = Array.from(mergedMap.values()).sort((a, b) => 
           new Date(b.date || b.createdAt).getTime() - new Date(a.date || a.createdAt).getTime()
         );
@@ -159,16 +174,21 @@ export function TransferSheetsManager({ currentUser, onRefreshParent }: Transfer
   const handleUpdateEditingItem = (index: number, field: keyof TransferSheetItem, value: any) => {
     if (!editingSheet) return;
     const updatedItems = [...editingSheet.items];
-    const current = { ...updatedItems[index], [field]: value };
+    const current = { ...updatedItems[index] };
     
-    if (field === 'quantity' || field === 'unitPrice') {
-      const qty = Number(field === 'quantity' ? value : current.quantity) || 0;
-      const price = Number(field === 'unitPrice' ? value : current.unitPrice) || 0;
-      current.total = qty * price;
+    if (field === 'quantity') {
+      current.quantity = Number(value) || 0;
+    } else if (field === 'unitPrice') {
+      current.unitPrice = Number(value) || 0;
+    } else if (field === 'unit') {
+      current.unit = value;
+    } else if (field === 'description') {
+      current.description = value;
     }
+    current.total = Number(current.quantity || 0) * Number(current.unitPrice || 0);
     
     updatedItems[index] = current;
-    const subtotal = updatedItems.reduce((acc, it) => acc + (it.total || 0), 0);
+    const subtotal = updatedItems.reduce((acc, it) => acc + (Number(it.total) || 0), 0);
     const total = subtotal;
 
     setEditingSheet({
@@ -217,7 +237,7 @@ export function TransferSheetsManager({ currentUser, onRefreshParent }: Transfer
       currentUser.name,
       `Modificó Hoja de Traslado ${editingSheet.folio}`,
       'Traslado de Productos',
-      `Folio: ${editingSheet.folio}, Cliente: ${editingSheet.clientName}, Destino: ${editingSheet.destination}, Total: $${editingSheet.total.toFixed(2)}`
+      `Folio: ${editingSheet.folio}, Cliente: ${editingSheet.clientName}, Destino: ${editingSheet.destination}, Total: $${Number(editingSheet.total || 0).toFixed(2)}`
     );
 
     // Sync to Supabase
@@ -230,7 +250,7 @@ export function TransferSheetsManager({ currentUser, onRefreshParent }: Transfer
         countBefore: sheets.length,
         countAfter: sheets.length,
         status: 'success',
-        payloadSummary: `Cliente: ${editingSheet.clientName} • Chofer: ${editingSheet.operator} • Total: $${editingSheet.total.toFixed(2)}`,
+        payloadSummary: `Cliente: ${editingSheet.clientName} • Chofer: ${editingSheet.operator} • Total: $${Number(editingSheet.total || 0).toFixed(2)}`,
         source: 'cloud_sync'
       });
     } catch (err) {
@@ -338,12 +358,17 @@ export function TransferSheetsManager({ currentUser, onRefreshParent }: Transfer
 
   const handleUpdateCreateItem = (index: number, field: keyof TransferSheetItem, value: any) => {
     const updated = [...createItems];
-    const current = { ...updated[index], [field]: value };
-    if (field === 'quantity' || field === 'unitPrice') {
-      const qty = Number(field === 'quantity' ? value : current.quantity) || 0;
-      const price = Number(field === 'unitPrice' ? value : current.unitPrice) || 0;
-      current.total = qty * price;
+    const current = { ...updated[index] };
+    if (field === 'quantity') {
+      current.quantity = Number(value) || 0;
+    } else if (field === 'unitPrice') {
+      current.unitPrice = Number(value) || 0;
+    } else if (field === 'unit') {
+      current.unit = value;
+    } else if (field === 'description') {
+      current.description = value;
     }
+    current.total = Number(current.quantity || 0) * Number(current.unitPrice || 0);
     updated[index] = current;
     setCreateItems(updated);
   };
@@ -403,7 +428,7 @@ export function TransferSheetsManager({ currentUser, onRefreshParent }: Transfer
       currentUser.name,
       `Creó Hoja de Traslado ${createFolio}`,
       'Traslado de Productos',
-      `Cliente: ${createClientName}, Destino: ${createDestination}, Total: $${subtotal.toFixed(2)}`
+      `Cliente: ${createClientName}, Destino: ${createDestination}, Total: $${Number(subtotal || 0).toFixed(2)}`
     );
 
     try {
@@ -415,7 +440,7 @@ export function TransferSheetsManager({ currentUser, onRefreshParent }: Transfer
         countBefore: sheets.length,
         countAfter: updated.length,
         status: 'success',
-        payloadSummary: `Cliente: ${createClientName} • Chofer: ${createOperator} • Total: $${subtotal.toFixed(2)}`,
+        payloadSummary: `Cliente: ${createClientName} • Chofer: ${createOperator} • Total: $${Number(subtotal || 0).toFixed(2)}`,
         source: 'cloud_sync'
       });
     } catch (err) {
@@ -454,7 +479,7 @@ export function TransferSheetsManager({ currentUser, onRefreshParent }: Transfer
       s.destination,
       s.operator || 'N/A',
       s.plateNo || 'N/A',
-      `$${s.total.toFixed(2)}`,
+      `$${Number(s.total || 0).toFixed(2)}`,
       s.active !== false ? 'ACTIVA' : 'CANCELADA'
     ]);
     exportToPDF('Listado Oficial de Hojas de Traslado de Productos - Miauloo', headers, rows);
@@ -881,8 +906,8 @@ export function TransferSheetsManager({ currentUser, onRefreshParent }: Transfer
                         <td className="p-2 text-center border-r font-medium">{it.quantity}</td>
                         <td className="p-2 text-center border-r font-medium uppercase">{it.unit}</td>
                         <td className="p-2 border-r font-semibold uppercase">{it.description}</td>
-                        <td className="p-2 text-right border-r">${it.unitPrice.toFixed(2)}</td>
-                        <td className="p-2 text-right font-bold">${it.total.toFixed(2)}</td>
+                        <td className="p-2 text-right border-r">${Number(it.unitPrice || 0).toFixed(2)}</td>
+                        <td className="p-2 text-right font-bold">${Number(it.total || 0).toFixed(2)}</td>
                       </tr>
                     ))}
                     {Array.from({ length: Math.max(0, 4 - selectedSheet.items.length) }).map((_, i) => (
@@ -902,7 +927,7 @@ export function TransferSheetsManager({ currentUser, onRefreshParent }: Transfer
                 <div className="w-64 border border-[#0B2545] divide-y divide-[#0B2545] text-[11px]">
                   <div className="p-1.5 flex justify-between font-bold">
                     <span>SUBTOTAL:</span>
-                    <span>${selectedSheet.subtotal.toFixed(2)}</span>
+                    <span>${Number(selectedSheet.subtotal || 0).toFixed(2)}</span>
                   </div>
                   <div className="p-1.5 flex justify-between">
                     <span>I.V.A:</span>
@@ -910,7 +935,7 @@ export function TransferSheetsManager({ currentUser, onRefreshParent }: Transfer
                   </div>
                   <div className="p-1.5 flex justify-between font-black text-sm bg-slate-100 text-[#0B2545]">
                     <span>TOTAL:</span>
-                    <span>${selectedSheet.total.toFixed(2)}</span>
+                    <span>${Number(selectedSheet.total || 0).toFixed(2)}</span>
                   </div>
                 </div>
               </div>
@@ -1240,7 +1265,7 @@ export function TransferSheetsManager({ currentUser, onRefreshParent }: Transfer
                               />
                             </td>
                             <td className="p-2 text-right font-black text-slate-900">
-                              ${item.total.toFixed(2)}
+                              ${Number(item.total || 0).toFixed(2)}
                             </td>
                             <td className="p-2 text-center">
                               <button
@@ -1262,11 +1287,11 @@ export function TransferSheetsManager({ currentUser, onRefreshParent }: Transfer
                     <div className="w-64 bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1.5">
                       <div className="flex justify-between font-medium text-slate-600">
                         <span>Subtotal:</span>
-                        <span>${editingSheet.subtotal.toFixed(2)}</span>
+                        <span>${Number(editingSheet.subtotal || 0).toFixed(2)}</span>
                       </div>
                       <div className="flex justify-between font-black text-slate-950 text-sm border-t border-slate-200 pt-1.5">
                         <span>TOTAL TRASLADO:</span>
-                        <span className="text-[#0B2545]">${editingSheet.total.toFixed(2)} MXN</span>
+                        <span className="text-[#0B2545]">${Number(editingSheet.total || 0).toFixed(2)} MXN</span>
                       </div>
                     </div>
                   </div>
@@ -1518,7 +1543,7 @@ export function TransferSheetsManager({ currentUser, onRefreshParent }: Transfer
                               />
                             </td>
                             <td className="p-2 text-right font-black text-slate-900">
-                              ${item.total.toFixed(2)}
+                              ${Number(item.total || 0).toFixed(2)}
                             </td>
                             <td className="p-2 text-center">
                               {createItems.length > 1 && (
@@ -1542,7 +1567,7 @@ export function TransferSheetsManager({ currentUser, onRefreshParent }: Transfer
                       <div className="flex justify-between font-black text-slate-950 text-sm">
                         <span>TOTAL TRASLADO:</span>
                         <span className="text-[#0B2545]">
-                          ${createItems.reduce((acc, it) => acc + (it.total || 0), 0).toFixed(2)} MXN
+                          ${createItems.reduce((acc, it) => acc + (Number(it.total) || 0), 0).toFixed(2)} MXN
                         </span>
                       </div>
                     </div>

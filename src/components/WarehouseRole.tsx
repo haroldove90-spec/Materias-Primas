@@ -1639,12 +1639,12 @@ export default function WarehouseRole({ onBack, currentUser, activeTab: propsAct
                     ) : (
                       poItems.map((item, index) => {
                         const mat = materials.find(m => m.id === item.materialId);
-                        const sub = item.quantity * item.unitPrice;
+                        const sub = Number(item.quantity || 0) * Number(item.unitPrice || 0);
                         return (
                           <tr key={index} className="border-b border-slate-100 hover:bg-slate-50">
                             <td className="p-2.5 font-semibold text-slate-900">{mat?.name || 'Insumo'}</td>
                             <td className="p-2.5 text-center font-mono font-bold">{item.quantity} {mat?.unit || 'kg'}</td>
-                            <td className="p-2.5 text-right font-mono">${item.unitPrice.toFixed(2)}</td>
+                            <td className="p-2.5 text-right font-mono">${Number(item.unitPrice || 0).toFixed(2)}</td>
                             <td className="p-2.5 text-right font-mono font-bold text-slate-900">${sub.toFixed(2)}</td>
                             <td className="p-2.5 text-center">
                               <button
@@ -1668,7 +1668,7 @@ export default function WarehouseRole({ onBack, currentUser, activeTab: propsAct
                 <div className="w-64 space-y-1 text-right text-xs">
                   <div className="flex justify-between text-slate-500">
                     <span>Subtotal:</span>
-                    <span className="font-mono">${poItems.reduce((acc, i) => acc + (i.quantity * i.unitPrice), 0).toFixed(2)} MXN</span>
+                    <span className="font-mono">${poItems.reduce((acc, i) => acc + (Number(i.quantity || 0) * Number(i.unitPrice || 0)), 0).toFixed(2)} MXN</span>
                   </div>
                   <div className="flex justify-between text-slate-500">
                     <span>Impuestos (Tasa 0%):</span>
@@ -1676,7 +1676,7 @@ export default function WarehouseRole({ onBack, currentUser, activeTab: propsAct
                   </div>
                   <div className="flex justify-between font-bold text-sm text-slate-900 border-t border-slate-200 pt-2">
                     <span>Total Estimado:</span>
-                    <span className="font-mono text-emerald-600">${poItems.reduce((acc, i) => acc + (i.quantity * i.unitPrice), 0).toFixed(2)} MXN</span>
+                    <span className="font-mono text-emerald-600">${poItems.reduce((acc, i) => acc + (Number(i.quantity || 0) * Number(i.unitPrice || 0)), 0).toFixed(2)} MXN</span>
                   </div>
                 </div>
               </div>
@@ -2028,8 +2028,8 @@ export default function WarehouseRole({ onBack, currentUser, activeTab: propsAct
                         <tr key={idx} className="hover:bg-slate-50">
                           <td className="p-2.5 font-semibold text-slate-800">{item.materialName}</td>
                           <td className="p-2.5 text-center font-mono font-bold">{item.quantity} pzs/kg</td>
-                          <td className="p-2.5 text-right font-mono">${item.unitPrice.toFixed(2)}</td>
-                          <td className="p-2.5 text-right font-mono font-bold text-slate-900">${(item.quantity * item.unitPrice).toFixed(2)}</td>
+                          <td className="p-2.5 text-right font-mono">${Number(item.unitPrice || 0).toFixed(2)}</td>
+                          <td className="p-2.5 text-right font-mono font-bold text-slate-900">${(Number(item.quantity || 0) * Number(item.unitPrice || 0)).toFixed(2)}</td>
                         </tr>
                       ))}
                     </tbody>

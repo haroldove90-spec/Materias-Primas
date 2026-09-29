@@ -643,10 +643,22 @@ export class MockDatabase {
   }
 
   static getSales(): Sale[] {
-    if (this.isSampleDataCleared()) {
-      return this.get<Sale[]>('sales', []);
-    }
-    return this.get<Sale[]>('sales', INITIAL_SALES);
+    const raw = this.isSampleDataCleared()
+      ? this.get<Sale[]>('sales', [])
+      : this.get<Sale[]>('sales', INITIAL_SALES);
+    return (raw || []).map(s => ({
+      ...s,
+      subtotal: Number(s.subtotal || 0),
+      tax: Number(s.tax || 0),
+      total: Number(s.total || 0),
+      amountPaid: Number(s.amountPaid || 0),
+      items: (s.items || []).map(it => ({
+        ...it,
+        quantity: Number(it.quantity || 0),
+        unitPrice: Number(it.unitPrice || 0),
+        total: Number(it.total !== undefined && it.total !== null ? it.total : (Number(it.quantity || 0) * Number(it.unitPrice || 0)))
+      }))
+    }));
   }
 
   static saveSales(data: Sale[]) {
@@ -706,10 +718,21 @@ export class MockDatabase {
   }
 
   static getTransferSheets(): TransferSheet[] {
-    if (this.isSampleDataCleared()) {
-      return this.get<TransferSheet[]>('transfer_sheets', []);
-    }
-    return this.get<TransferSheet[]>('transfer_sheets', INITIAL_TRANSFER_SHEETS);
+    const raw = this.isSampleDataCleared()
+      ? this.get<TransferSheet[]>('transfer_sheets', [])
+      : this.get<TransferSheet[]>('transfer_sheets', INITIAL_TRANSFER_SHEETS);
+    return (raw || []).map(s => ({
+      ...s,
+      subtotal: Number(s.subtotal || 0),
+      tax: Number(s.tax || 0),
+      total: Number(s.total || 0),
+      items: (s.items || []).map(it => ({
+        ...it,
+        quantity: Number(it.quantity || 0),
+        unitPrice: Number(it.unitPrice || 0),
+        total: Number(it.total !== undefined && it.total !== null ? it.total : (Number(it.quantity || 0) * Number(it.unitPrice || 0)))
+      }))
+    }));
   }
 
   static saveTransferSheets(data: TransferSheet[]) {
@@ -717,10 +740,21 @@ export class MockDatabase {
   }
 
   static getSaleNotes(): SaleNote[] {
-    if (this.isSampleDataCleared()) {
-      return this.get<SaleNote[]>('sale_notes', []);
-    }
-    return this.get<SaleNote[]>('sale_notes', INITIAL_SALE_NOTES);
+    const raw = this.isSampleDataCleared()
+      ? this.get<SaleNote[]>('sale_notes', [])
+      : this.get<SaleNote[]>('sale_notes', INITIAL_SALE_NOTES);
+    return (raw || []).map(n => ({
+      ...n,
+      subtotal: Number(n.subtotal || 0),
+      tax: Number(n.tax || 0),
+      total: Number(n.total || 0),
+      items: (n.items || []).map(it => ({
+        ...it,
+        pieces: Number(it.pieces || 0),
+        unitPrice: Number(it.unitPrice || 0),
+        total: Number(it.total !== undefined && it.total !== null ? it.total : (Number(it.pieces || 0) * Number(it.unitPrice || 0)))
+      }))
+    }));
   }
 
   static saveSaleNotes(data: SaleNote[]) {

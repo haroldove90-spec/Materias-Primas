@@ -2126,7 +2126,14 @@ export async function fetchSalesFromSupabase(): Promise<{ success: boolean; data
       id: s.id,
       clientId: s.client_id,
       clientName: s.client_name,
-      items: Array.isArray(s.items) ? s.items : [],
+      items: (Array.isArray(s.items) ? s.items : []).map((it: any) => ({
+        id: String(it.id || ''),
+        productName: String(it.productName || it.product_name || ''),
+        quantity: Number(it.quantity || 0),
+        unit: String(it.unit || 'pzs'),
+        unitPrice: Number(it.unitPrice ?? it.unit_price ?? 0),
+        total: Number(it.total !== undefined && it.total !== null ? it.total : (Number(it.quantity || 0) * Number(it.unitPrice ?? it.unit_price ?? 0)))
+      })),
       subtotal: Number(s.subtotal || 0),
       tax: Number(s.tax || 0),
       total: Number(s.total || 0),
@@ -2278,7 +2285,13 @@ export async function fetchTransferSheetsFromSupabase(): Promise<{ success: bool
       paymentForm: ts.payment_form || '',
       operator: ts.operator || '',
       plateNo: ts.plate_no || '',
-      items: Array.isArray(ts.items) ? ts.items : [],
+      items: (Array.isArray(ts.items) ? ts.items : []).map((it: any) => ({
+        quantity: Number(it.quantity || 0),
+        unit: String(it.unit || 'LTS'),
+        description: String(it.description || ''),
+        unitPrice: Number(it.unitPrice ?? it.unit_price ?? 0),
+        total: Number(it.total !== undefined && it.total !== null ? it.total : (Number(it.quantity || 0) * Number(it.unitPrice ?? it.unit_price ?? 0)))
+      })),
       subtotal: Number(ts.subtotal || 0),
       tax: Number(ts.tax || 0),
       total: Number(ts.total || 0),
@@ -2359,7 +2372,12 @@ export async function fetchSaleNotesFromSupabase(): Promise<{ success: boolean; 
       clientName: sn.client_name,
       phone: sn.phone || '',
       city: sn.city || '',
-      items: Array.isArray(sn.items) ? sn.items : [],
+      items: (Array.isArray(sn.items) ? sn.items : []).map((it: any) => ({
+        pieces: Number(it.pieces || 0),
+        product: String(it.product || ''),
+        unitPrice: Number(it.unitPrice ?? it.unit_price ?? 0),
+        total: Number(it.total !== undefined && it.total !== null ? it.total : (Number(it.pieces || 0) * Number(it.unitPrice ?? it.unit_price ?? 0)))
+      })),
       subtotal: Number(sn.subtotal || 0),
       tax: Number(sn.tax || 0),
       total: Number(sn.total || 0),
