@@ -6,7 +6,13 @@ import {
 } from 'lucide-react';
 import { MockDatabase } from '../data';
 import { SaleNote, SaleNoteItem, User } from '../types';
-import { exportToExcel, exportToPDF } from '../utils/exportUtils';
+import { 
+  exportToExcel, 
+  exportToPDF, 
+  exportSaleNoteToPDF, 
+  printSaleNoteReceipt, 
+  printElement 
+} from '../utils/exportUtils';
 import { recordSaveTelemetry } from '../services/supabaseTelemetry';
 import { 
   fetchSaleNotesFromSupabase, 
@@ -468,6 +474,7 @@ export function SaleNotesManager({ currentUser, onRefreshParent }: SaleNotesMana
           <button
             onClick={handleExportExcel}
             className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-xl text-xs font-bold flex items-center transition-all shadow-xs cursor-pointer"
+            title="Exportar listado a Excel (.csv con UTF-8)"
           >
             <Download className="w-3.5 h-3.5 mr-1.5" /> Excel
           </button>
@@ -475,8 +482,55 @@ export function SaleNotesManager({ currentUser, onRefreshParent }: SaleNotesMana
           <button
             onClick={handleExportPDF}
             className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-xl text-xs font-bold flex items-center transition-all shadow-xs cursor-pointer"
+            title="Descargar archivo PDF con todas las notas de venta"
           >
-            <Printer className="w-3.5 h-3.5 mr-1.5" /> PDF
+            <FileText className="w-3.5 h-3.5 mr-1.5" /> Exportar Todo a PDF
+          </button>
+
+          <button
+            onClick={() => {
+              const headers = ['No. Nota', 'Fecha', 'Cliente', 'Ciudad', 'Partidas', 'Total ($ MXN)', 'Estatus'];
+              const rows = filteredNotes.map(n => [
+                `No. ${n.noteNo}`,
+                n.date,
+                n.clientName,
+                n.city || 'S/D',
+                `${n.items.length} prod. (${n.items.reduce((s, i) => s + i.pieces, 0)} pzs)`,
+                `$${n.total.toFixed(2)}`,
+                n.active !== false ? 'ACTIVA' : 'CANCELADA'
+              ]);
+              printElement(`
+                <div style="font-family: system-ui, sans-serif; padding: 10px;">
+                  <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #1e3a8a; padding-bottom:8px; margin-bottom:12px;">
+                    <div>
+                      <h2 style="margin:0; color:#1e3a8a; font-size:18px;">LISTADO DE NOTAS DE VENTA - MIAULOO</h2>
+                      <p style="margin:4px 0 0 0; color:#64748b; font-size:10px;">Generado: ${new Date().toLocaleString('es-MX')} • Total Registros: ${rows.length}</p>
+                    </div>
+                    <div style="text-align:right; font-size:10px; font-weight:bold; color:#1e3a8a;">
+                      DOCUMENTO OFICIAL
+                    </div>
+                  </div>
+                  <table style="width:100%; border-collapse:collapse; font-size:10px;">
+                    <thead>
+                      <tr style="background:#1e3a8a; color:white;">
+                        ${headers.map(h => `<th style="padding:6px 8px; text-align:left; border:1px solid #1e3a8a;">${h}</th>`).join('')}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${rows.map((r, idx) => `
+                        <tr style="background:${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+                          ${r.map(c => `<td style="padding:5px 8px; border:1px solid #e2e8f0;">${c}</td>`).join('')}
+                        </tr>
+                      `).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              `, 'Listado_Notas_Venta_Miauloo');
+            }}
+            className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-xl text-xs font-bold flex items-center transition-all shadow-xs cursor-pointer"
+            title="Imprimir listado en papel o guardar en PDF del navegador"
+          >
+            <Printer className="w-3.5 h-3.5 mr-1.5" /> Imprimir Listado
           </button>
 
           <button
@@ -648,14 +702,32 @@ export function SaleNotesManager({ currentUser, onRefreshParent }: SaleNotesMana
                       </td>
                       <td className="p-3.5 text-right">
                         <div className="flex items-center justify-end space-x-1.5">
-                          {/* VER / IMPRIMIR */}
+                          {/* IMPRIMIR DIRECTO */}
+                          <button
+                            onClick={() => printSaleNoteReceipt(note)}
+                            className="p-1.5 text-purple-700 hover:text-purple-900 hover:bg-purple-100 rounded-lg transition-colors cursor-pointer"
+                            title="Imprimir Nota de Venta (Directo a Impresora)"
+                          >
+                            <Printer className="w-4 h-4" />
+                          </button>
+
+                          {/* DESCARGAR PDF */}
+                          <button
+                            onClick={() => exportSaleNoteToPDF(note)}
+                            className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-100 rounded-lg transition-colors cursor-pointer"
+                            title="Descargar Nota de Venta en PDF"
+                          >
+                            <FileText className="w-4 h-4" />
+                          </button>
+
+                          {/* VER / VISTA PREVIA */}
                           <button
                             onClick={() => {
                               setSelectedNote(note);
                               setShowViewModal(true);
                             }}
-                            className="p-1.5 text-purple-700 hover:text-purple-900 hover:bg-purple-100 rounded-lg transition-colors cursor-pointer"
-                            title="Ver e Imprimir Formato Oficial Miauloo"
+                            className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                            title="Ver Ficha y Vista Previa Completa"
                           >
                             <Eye className="w-4 h-4" />
                           </button>
@@ -709,10 +781,18 @@ export function SaleNotesManager({ currentUser, onRefreshParent }: SaleNotesMana
                   <Edit className="w-3.5 h-3.5 mr-1.5" /> Editar
                 </button>
                 <button
-                  onClick={() => window.print()}
-                  className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold flex items-center transition-all shadow-xs cursor-pointer"
+                  onClick={() => exportSaleNoteToPDF(selectedNote)}
+                  className="bg-red-600 hover:bg-red-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center transition-all shadow-xs cursor-pointer"
+                  title="Descargar archivo PDF oficial de esta nota"
                 >
-                  <Printer className="w-4 h-4 mr-1.5" /> Imprimir / PDF
+                  <Download className="w-3.5 h-3.5 mr-1.5" /> Descargar PDF
+                </button>
+                <button
+                  onClick={() => printSaleNoteReceipt(selectedNote)}
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center transition-all shadow-xs cursor-pointer"
+                  title="Mandar a imprimir directamente"
+                >
+                  <Printer className="w-3.5 h-3.5 mr-1.5" /> Imprimir
                 </button>
                 <button
                   onClick={() => setShowViewModal(false)}

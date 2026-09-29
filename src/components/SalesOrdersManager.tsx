@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { Sale, OrderItem, User, Client } from '../types';
 import { MockDatabase } from '../data';
-import { exportToExcel, exportToPDF } from '../utils/exportUtils';
+import { exportToExcel, exportToPDF, printElement } from '../utils/exportUtils';
 import { recordSaveTelemetry } from '../services/supabaseTelemetry';
 import { 
   fetchSalesFromSupabase, 
@@ -681,7 +681,60 @@ export const SalesOrdersManager: React.FC<SalesOrdersManagerProps> = ({ currentU
                 onClick={() => {
                   exportToPDF(`Comprobante_${selectedSale.id}`, ['Cant.', 'Producto', 'P. Unitario', 'Total'], selectedSale.items.map(i => [`${i.quantity} ${i.unit}`, i.productName, `$${i.unitPrice.toFixed(2)}`, `$${i.total.toFixed(2)}`]));
                 }}
-                className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-xs"
+                className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-xs"
+                title="Descargar Comprobante en archivo PDF"
+              >
+                <Download className="w-3.5 h-3.5" /> Descargar PDF
+              </button>
+              <button
+                onClick={() => {
+                  printElement(`
+                    <div style="font-family: system-ui, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; color: #0f172a;">
+                      <div style="border-bottom: 2px solid #1e3a8a; padding-bottom: 10px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div>
+                          <h2 style="margin: 0; color: #1e3a8a; font-size: 20px; font-weight: 900;">MIAULOO ERP</h2>
+                          <p style="margin: 2px 0 0 0; font-size: 10px; color: #64748b;">Comprobante de Venta Comercial</p>
+                        </div>
+                        <div style="text-align: right;">
+                          <div style="font-weight: 900; font-size: 14px; color: #dc2626;">FOLIO: ${selectedSale.id}</div>
+                          <div style="font-size: 10px; color: #64748b; margin-top: 2px;">${new Date(selectedSale.createdAt).toLocaleString('es-MX')}</div>
+                        </div>
+                      </div>
+                      <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px 14px; border-radius: 6px; margin-bottom: 14px; font-size: 11px;">
+                        <div><strong>Cliente:</strong> <span style="text-transform: uppercase;">${selectedSale.clientName}</span></div>
+                        <div style="margin-top: 3px;"><strong>Condición de Pago:</strong> ${selectedSale.paymentType}</div>
+                      </div>
+                      <table style="width: 100%; border-collapse: collapse; font-size: 10px; margin-bottom: 14px; border: 1px solid #1e3a8a;">
+                        <thead>
+                          <tr style="background: #1e3a8a; color: white;">
+                            <th style="padding: 7px; text-align: center; width: 65px;">Cant.</th>
+                            <th style="padding: 7px; text-align: left;">Producto / Insumo</th>
+                            <th style="padding: 7px; text-align: right; width: 85px;">P.U</th>
+                            <th style="padding: 7px; text-align: right; width: 95px;">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          ${selectedSale.items.map((it, idx) => `
+                            <tr style="border-bottom: 1px solid #e2e8f0; background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+                              <td style="padding: 6px 7px; text-align: center;">${it.quantity} ${it.unit}</td>
+                              <td style="padding: 6px 7px; font-weight: 600;">${it.productName}</td>
+                              <td style="padding: 6px 7px; text-align: right;">$${it.unitPrice.toFixed(2)}</td>
+                              <td style="padding: 6px 7px; text-align: right; font-weight: bold;">$${it.total.toFixed(2)}</td>
+                            </tr>
+                          `).join('')}
+                        </tbody>
+                      </table>
+                      <div style="text-align: right; font-size: 14px; font-weight: 900; color: #1e3a8a; margin-bottom: 20px;">
+                        TOTAL: $${selectedSale.total.toFixed(2)} MXN
+                      </div>
+                      <div style="border-top: 1px solid #cbd5e1; padding-top: 8px; text-align: center; font-size: 9px; color: #94a3b8;">
+                        Documento emitido por MIAULOO ERP • San Juan del Río, Qro.
+                      </div>
+                    </div>
+                  `, `Comprobante_${selectedSale.id}`);
+                }}
+                className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-xs"
+                title="Mandar a imprimir comprobante a impresora"
               >
                 <Printer className="w-3.5 h-3.5" /> Imprimir Comprobante
               </button>

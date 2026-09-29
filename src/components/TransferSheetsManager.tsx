@@ -6,7 +6,12 @@ import {
 } from 'lucide-react';
 import { MockDatabase } from '../data';
 import { TransferSheet, TransferSheetItem, User } from '../types';
-import { exportToExcel, exportToPDF } from '../utils/exportUtils';
+import { 
+  exportToExcel, 
+  exportToPDF, 
+  exportTransferSheetToPDF, 
+  printElement 
+} from '../utils/exportUtils';
 import { recordSaveTelemetry } from '../services/supabaseTelemetry';
 import { 
   fetchTransferSheetsFromSupabase, 
@@ -683,13 +688,31 @@ export function TransferSheetsManager({ currentUser, onRefreshParent }: Transfer
                       </td>
                       <td className="p-3.5 text-right">
                         <div className="flex items-center justify-end space-x-1.5">
+                          {/* IMPRIMIR DIRECTO */}
+                          <button
+                            onClick={() => printElement('printable-transfer-sheet', `Hoja_Traslado_${sheet.folio}`)}
+                            className="p-1.5 text-blue-700 hover:text-blue-900 hover:bg-blue-100 rounded-lg transition-colors cursor-pointer"
+                            title="Imprimir Hoja de Traslado Directo"
+                          >
+                            <Printer className="w-4 h-4" />
+                          </button>
+
+                          {/* DESCARGAR PDF */}
+                          <button
+                            onClick={() => exportTransferSheetToPDF(sheet)}
+                            className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-100 rounded-lg transition-colors cursor-pointer"
+                            title="Descargar Hoja de Traslado en PDF"
+                          >
+                            <FileText className="w-4 h-4" />
+                          </button>
+
                           {/* VER / IMPRIMIR OFICIAL */}
                           <button
                             onClick={() => {
                               setSelectedSheet(sheet);
                               setShowViewModal(true);
                             }}
-                            className="p-1.5 text-blue-700 hover:text-blue-900 hover:bg-blue-100 rounded-lg transition-colors cursor-pointer"
+                            className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                             title="Ver e Imprimir Formato Oficial Miauloo"
                           >
                             <Eye className="w-4 h-4" />
@@ -744,10 +767,18 @@ export function TransferSheetsManager({ currentUser, onRefreshParent }: Transfer
                   <Edit className="w-3.5 h-3.5 mr-1.5" /> Editar
                 </button>
                 <button
-                  onClick={() => window.print()}
-                  className="bg-[#0B2545] hover:bg-[#133966] text-white px-4 py-1.5 rounded-lg text-xs font-bold flex items-center transition-all shadow-xs cursor-pointer"
+                  onClick={() => exportTransferSheetToPDF(selectedSheet)}
+                  className="bg-red-600 hover:bg-red-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center transition-all shadow-xs cursor-pointer"
+                  title="Descargar Hoja de Traslado en PDF Oficial"
                 >
-                  <Printer className="w-4 h-4 mr-1.5" /> Exportar en PDF / Imprimir
+                  <Download className="w-3.5 h-3.5 mr-1.5" /> Descargar PDF
+                </button>
+                <button
+                  onClick={() => printElement('printable-transfer-sheet', `Hoja_Traslado_${selectedSheet.folio}`)}
+                  className="bg-[#0B2545] hover:bg-[#133966] text-white px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center transition-all shadow-xs cursor-pointer"
+                  title="Mandar a imprimir directamente a la impresora"
+                >
+                  <Printer className="w-4 h-4 mr-1.5" /> Imprimir
                 </button>
                 <button
                   onClick={() => setShowViewModal(false)}
