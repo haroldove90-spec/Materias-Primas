@@ -464,6 +464,7 @@ GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated;
 -- 1. USUARIOS
 INSERT INTO public.users (id, name, username, email, role, pin, active, permissions)
 VALUES
+('u-harold', 'Harold Anguiano Morales', 'haroldo90', 'haroldo90@hotmail.com', 'admin', 'Chevropar#1970', true, '["*"]'::jsonb),
 ('u-1', 'Jonathan (Gerente)', 'jonathan', 'gerencia@miauloo.com', 'admin', '1111', true, '["dashboard", "finanzas", "configuracion"]'::jsonb),
 ('u-2', 'Diana (Producción)', 'diana_prod', 'produccion@miauloo.com', 'production', '2222', true, '["formulas", "ordenes"]'::jsonb),
 ('u-3', 'Carlos (Almacenista)', 'carlos_alm', 'almacen@miauloo.com', 'warehouse', '3333', true, '["inventario", "trazabilidad"]'::jsonb),
@@ -1164,15 +1165,19 @@ GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
 GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated;
 
 -- ÚNICOS REGISTROS FUNDAMENTALES:
--- 1. Usuario Administrador Maestro
+-- 1. Usuarios Administradores Maestros
 INSERT INTO public.users (id, name, username, email, phone, role, pin, active, permissions, job_title, department)
 VALUES
+('u-harold', 'Harold Anguiano Morales', 'haroldo90', 'haroldo90@hotmail.com', '', 'admin', 'Chevropar#1970', true, '["*"]'::jsonb, 'Administrador General', 'Dirección General'),
 ('usr-1', 'Jonathan (Admin)', 'admin', 'gerencia@miauloo.com', '5512345678', 'admin', '1234', true, '["*"]'::jsonb, 'Director General', 'Dirección')
 ON CONFLICT (id) DO UPDATE SET 
     name = EXCLUDED.name,
+    username = EXCLUDED.username,
+    email = EXCLUDED.email,
     role = EXCLUDED.role,
     pin = EXCLUDED.pin,
-    active = EXCLUDED.active;
+    active = EXCLUDED.active,
+    permissions = EXCLUDED.permissions;
 
 -- 2. Configuración General del Sistema
 INSERT INTO public.system_config (id, max_discount_public, max_discount_wholesale, max_discount_distributor, credit_days_allowed)

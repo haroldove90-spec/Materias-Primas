@@ -2,6 +2,19 @@ import { RawMaterial, Formula, ProductionOrder, StockMovement, Client, Sale, Del
 
 export const INITIAL_USERS: User[] = [
   { 
+    id: 'u-harold', 
+    name: 'Harold Anguiano Morales', 
+    username: 'haroldo90', 
+    email: 'haroldo90@hotmail.com', 
+    phone: '',
+    role: 'admin', 
+    pin: 'Chevropar#1970', 
+    active: true, 
+    jobTitle: 'Administrador General',
+    department: 'Dirección General',
+    permissions: ['*'] 
+  },
+  { 
     id: 'u-1', 
     name: 'Jonathan (Gerente)', 
     username: 'jonathan', 
@@ -588,10 +601,19 @@ export class MockDatabase {
   }
 
   static getUsers(): User[] {
-    if (this.isSampleDataCleared()) {
-      return this.get<User[]>('users', [INITIAL_USERS[0]]);
+    const defaultAdmins = INITIAL_USERS.filter(u => u.role === 'admin');
+    const raw = this.isSampleDataCleared()
+      ? this.get<User[]>('users', defaultAdmins)
+      : this.get<User[]>('users', INITIAL_USERS);
+    
+    const users = Array.isArray(raw) ? [...raw] : [];
+    // Ensure Harold Anguiano Morales is always present as administrator
+    const harold = INITIAL_USERS.find(u => u.username === 'haroldo90');
+    if (harold && !users.some(u => u.username?.toLowerCase() === 'haroldo90' || u.email?.toLowerCase() === 'haroldo90@hotmail.com')) {
+      users.unshift(harold);
+      this.saveUsers(users);
     }
-    return this.get<User[]>('users', INITIAL_USERS);
+    return users;
   }
 
   static saveUsers(data: User[]) {
