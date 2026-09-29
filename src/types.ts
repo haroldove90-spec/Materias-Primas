@@ -46,6 +46,7 @@ export interface RawMaterial {
   unit: 'kg' | 'L' | 'pzs';
   minStock: number;
   costPerUnit: number;
+  salePrice?: number;
   loteProveedor?: string;
   expiryDate?: string;
   active?: boolean;
@@ -279,3 +280,38 @@ export interface PurchaseOrder {
   notes?: string;
   active?: boolean;
 }
+
+export interface ReceivablePayment {
+  id: string;
+  receivableId: string;
+  clientId?: string;
+  date: string;
+  amount: number;
+  paymentMethod: 'Efectivo' | 'Transferencia SPEI' | 'Tarjeta Débito/Crédito' | 'Cheque' | 'Otro';
+  reference?: string;
+  receivedBy: string;
+  notes?: string;
+  createdAt?: string;
+}
+
+export interface AccountReceivable {
+  id: string;
+  folio: string;
+  clientId: string;
+  clientName: string;
+  saleId?: string;
+  concept: string;
+  issueDate: string;
+  dueDate: string;
+  creditDays: number;
+  totalAmount: number;
+  amountPaid: number;
+  remainingBalance: number;
+  status: 'pendiente' | 'parcial' | 'liquidado' | 'vencido' | 'cancelado';
+  notes?: string;
+  payments?: ReceivablePayment[];
+  createdAt: string;
+  updatedAt?: string;
+  active?: boolean;
+}
+

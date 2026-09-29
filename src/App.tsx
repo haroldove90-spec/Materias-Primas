@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Shield, Beaker, Package, ShoppingCart, Truck, RefreshCw, Home, LogOut,
   BarChart3, DollarSign, Settings, Activity, Layers, Users, FileCheck, MapPin,
-  FileText, Receipt, Database, ChevronRight, Lock, User as UserIcon, Edit3
+  FileText, Receipt, Database, ChevronRight, Lock, User as UserIcon, Edit3, Landmark, Trash2
 } from 'lucide-react';
 import { MockDatabase, INITIAL_USERS } from './data';
 import { User, RoleType } from './types';
@@ -27,7 +27,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [activeRoleTab, setActiveRoleTab] = useState<string>('analytics');
   const [showSupabaseModal, setShowSupabaseModal] = useState(false);
-  const [modalInitialTab, setModalInitialTab] = useState<'status' | 'sync' | 'history' | 'sql' | 'tables'>('status');
+  const [modalInitialTab, setModalInitialTab] = useState<'status' | 'sync' | 'history' | 'sql' | 'tables' | 'clean'>('status');
   const [showProfileModal, setShowProfileModal] = useState(false);
 
   // Modal for role-based authentication and registration
@@ -69,7 +69,7 @@ export default function App() {
     initSyncUsers();
   }, []);
 
-  const openSupabaseWithTab = (tab: 'status' | 'sync' | 'history' | 'sql' | 'tables' = 'status') => {
+  const openSupabaseWithTab = (tab: 'status' | 'sync' | 'history' | 'sql' | 'tables' | 'clean' = 'status') => {
     setModalInitialTab(tab);
     setShowSupabaseModal(true);
   };
@@ -133,7 +133,9 @@ export default function App() {
     admin: [
       { id: 'analytics', label: 'Dashboard', shortLabel: 'Dashboard', icon: BarChart3 },
       { id: 'finances', label: 'Finanzas y Crédito', shortLabel: 'Finanzas', icon: DollarSign },
-      { id: 'clients', label: 'Clientes', shortLabel: 'Clientes', icon: Users },
+      { id: 'cobranza', label: 'Cuentas por Cobrar', shortLabel: 'Cobranza', icon: Landmark },
+      { id: 'sales_orders', label: 'Ventas y Pedidos', shortLabel: 'Ventas', icon: ShoppingCart },
+      { id: 'clients', label: 'Clientes y Prospectos', shortLabel: 'Clientes', icon: Users },
       { id: 'notas', label: 'Notas de Venta', shortLabel: 'Notas', icon: Receipt },
       { id: 'traslado', label: 'Hojas de Traslado', shortLabel: 'Traslado', icon: FileText },
       { id: 'suppliers', label: 'Proveedores', shortLabel: 'Proveedores', icon: Truck },
@@ -153,9 +155,9 @@ export default function App() {
       { id: 'suppliers', label: 'Proveedores', shortLabel: 'Proveedores', icon: Truck },
     ],
     sales: [
-      { id: 'pos', label: 'Punto de Venta', shortLabel: 'Caja', icon: ShoppingCart },
-      { id: 'crm', label: 'Clientes y Créditos', shortLabel: 'Clientes', icon: Users },
-      { id: 'cobranza', label: 'Cobros y Remisiones', shortLabel: 'Cobros', icon: FileCheck },
+      { id: 'pos', label: 'Punto de Venta / Pedidos', shortLabel: 'Caja', icon: ShoppingCart },
+      { id: 'crm', label: 'Clientes y Prospectos', shortLabel: 'Clientes', icon: Users },
+      { id: 'cobranza', label: 'Cuentas por Cobrar', shortLabel: 'Cobranza', icon: Landmark },
       { id: 'traslado', label: 'Traslado de Productos', shortLabel: 'Traslado', icon: FileText },
       { id: 'notas', label: 'Notas de Venta', shortLabel: 'Notas', icon: Receipt },
     ],
@@ -290,6 +292,13 @@ export default function App() {
         <footer className="max-w-5xl mx-auto w-full text-center py-6 text-xs text-slate-400 border-t border-slate-200/60 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0 relative z-10">
           <p>© 2026 Miauloo. Soluciones integrales de abasto. Todos los derechos reservados.</p>
           <div className="flex items-center gap-2">
+            <button 
+              onClick={() => openSupabaseWithTab('clean')}
+              className="text-rose-700 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-300 px-3 py-1.5 rounded-lg shadow-xs hover:shadow-sm font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+              title="Borrar productos, ventas y clientes de prueba"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-500" /> Borrar Datos de Muestra
+            </button>
             <button 
               onClick={() => openSupabaseWithTab('history')}
               className="text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-3 py-1.5 rounded-lg shadow-xs hover:shadow-sm font-bold flex items-center gap-1.5 transition-all cursor-pointer"

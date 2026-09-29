@@ -13,7 +13,10 @@ import {
   INITIAL_PURCHASE_ORDERS, 
   INITIAL_TRANSFER_SHEETS, 
   INITIAL_SALE_NOTES,
-  INITIAL_SUPPLIERS 
+  INITIAL_SUPPLIERS,
+  INITIAL_ACCOUNTS_RECEIVABLE,
+  INITIAL_RECEIVABLE_PAYMENTS,
+  MockDatabase
 } from '../data';
 import { 
   Supplier, 
@@ -26,7 +29,9 @@ import {
   PurchaseOrder, 
   TransferSheet, 
   SaleNote, 
-  DeliveryRoute 
+  DeliveryRoute,
+  AccountReceivable,
+  ReceivablePayment 
 } from '../types';
 
 export const SUPABASE_SQL_SCRIPT = `-- ==============================================================================
@@ -96,13 +101,31 @@ CREATE TABLE IF NOT EXISTS public.raw_materials (
     name TEXT NOT NULL,
     sku TEXT NOT NULL,
     stock NUMERIC NOT NULL DEFAULT 0,
-    unit TEXT NOT NULL CHECK (unit IN ('kg', 'L', 'pzs')),
+    unit TEXT NOT NULL DEFAULT 'kg',
     min_stock NUMERIC NOT NULL DEFAULT 0,
     cost_per_unit NUMERIC NOT NULL DEFAULT 0,
+    sale_price NUMERIC,
     lote_proveedor TEXT,
     expiry_date DATE,
+    active BOOLEAN NOT NULL DEFAULT true,
+    notes TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE public.raw_materials ADD COLUMN IF NOT EXISTS sku TEXT;
+ALTER TABLE public.raw_materials ADD COLUMN IF NOT EXISTS stock NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE public.raw_materials ADD COLUMN IF NOT EXISTS unit TEXT NOT NULL DEFAULT 'kg';
+ALTER TABLE public.raw_materials ADD COLUMN IF NOT EXISTS min_stock NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE public.raw_materials ADD COLUMN IF NOT EXISTS cost_per_unit NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE public.raw_materials ADD COLUMN IF NOT EXISTS sale_price NUMERIC;
+ALTER TABLE public.raw_materials ADD COLUMN IF NOT EXISTS lote_proveedor TEXT;
+ALTER TABLE public.raw_materials ADD COLUMN IF NOT EXISTS expiry_date DATE;
+ALTER TABLE public.raw_materials ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE public.raw_materials ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE public.raw_materials DROP CONSTRAINT IF EXISTS raw_materials_unit_check;
+CREATE INDEX IF NOT EXISTS idx_raw_materials_sku ON public.raw_materials(sku);
+CREATE INDEX IF NOT EXISTS idx_raw_materials_active ON public.raw_materials(active);
+
 
 -- 4. TABLA: FÓRMULAS Y RECETAS (formulas)
 CREATE TABLE IF NOT EXISTS public.formulas (
@@ -149,8 +172,15 @@ CREATE TABLE IF NOT EXISTS public.clients (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS rfc TEXT;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS phone TEXT;
 ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS whatsapp TEXT;
 ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS address TEXT;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS price_list TEXT NOT NULL DEFAULT 'Público';
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS credit_days INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS credit_limit NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS current_debt NUMERIC NOT NULL DEFAULT 0;
 
 -- 7. TABLA: VENTAS Y COTIZACIONES (sales)
 CREATE TABLE IF NOT EXISTS public.sales (
@@ -169,6 +199,16 @@ CREATE TABLE IF NOT EXISTS public.sales (
     credit_days_left INTEGER,
     amount_paid NUMERIC NOT NULL DEFAULT 0
 );
+
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS client_id TEXT;
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS client_name TEXT;
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS items JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS payment_type TEXT NOT NULL DEFAULT 'Contado';
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'Cotización';
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS billing_type TEXT NOT NULL DEFAULT 'Remisión';
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS cfdi_status TEXT;
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS credit_days_left INTEGER;
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS amount_paid NUMERIC NOT NULL DEFAULT 0;
 
 -- 8. TABLA: RUTAS DE ENTREGA Y LOGÍSTICA (delivery_routes)
 CREATE TABLE IF NOT EXISTS public.delivery_routes (
@@ -268,7 +308,8 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
 );
 
 -- 14. TABLA: CONFIGURACIÓN GENERAL DEL SISTEMA (system_config)
-CREATE TABLE IF NOT EXISTS public.system_config (
+DROP TABLE IF EXISTS public.system_config CASCADE;
+CREATE TABLE public.system_config (
     id TEXT PRIMARY KEY DEFAULT 'default',
     max_discount_public NUMERIC NOT NULL DEFAULT 5,
     max_discount_wholesale NUMERIC NOT NULL DEFAULT 12,
@@ -276,6 +317,70 @@ CREATE TABLE IF NOT EXISTS public.system_config (
     credit_days_allowed INTEGER NOT NULL DEFAULT 60,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- 15. TABLA: CUENTAS POR COBRAR Y CARTERA DE CRÉDITO (accounts_receivable)
+CREATE TABLE IF NOT EXISTS public.accounts_receivable (
+    id TEXT PRIMARY KEY,
+    folio TEXT NOT NULL,
+    client_id TEXT REFERENCES public.clients(id) ON DELETE SET NULL,
+    client_name TEXT NOT NULL,
+    sale_id TEXT,
+    concept TEXT NOT NULL,
+    issue_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    due_date DATE NOT NULL,
+    credit_days INTEGER NOT NULL DEFAULT 30,
+    total_amount NUMERIC NOT NULL DEFAULT 0,
+    amount_paid NUMERIC NOT NULL DEFAULT 0,
+    remaining_balance NUMERIC NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'pendiente' CHECK (status IN ('pendiente', 'parcial', 'liquidado', 'vencido', 'cancelado')),
+    notes TEXT,
+    active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Asegurar columnas si la tabla ya existía
+ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS folio TEXT;
+ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS client_id TEXT;
+ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS client_name TEXT;
+ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS sale_id TEXT;
+ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS concept TEXT;
+ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS issue_date DATE NOT NULL DEFAULT CURRENT_DATE;
+ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS due_date DATE;
+ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS credit_days INTEGER NOT NULL DEFAULT 30;
+ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS total_amount NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS amount_paid NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS remaining_balance NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pendiente';
+ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+CREATE INDEX IF NOT EXISTS idx_cxc_client_id ON public.accounts_receivable(client_id);
+CREATE INDEX IF NOT EXISTS idx_cxc_status ON public.accounts_receivable(status);
+CREATE INDEX IF NOT EXISTS idx_cxc_due_date ON public.accounts_receivable(due_date);
+
+-- 16. TABLA: REGISTRO DE PAGOS Y ABONOS (receivable_payments)
+CREATE TABLE IF NOT EXISTS public.receivable_payments (
+    id TEXT PRIMARY KEY,
+    receivable_id TEXT REFERENCES public.accounts_receivable(id) ON DELETE CASCADE,
+    client_id TEXT REFERENCES public.clients(id) ON DELETE SET NULL,
+    date DATE NOT NULL DEFAULT CURRENT_DATE,
+    amount NUMERIC NOT NULL DEFAULT 0,
+    payment_method TEXT NOT NULL DEFAULT 'Efectivo',
+    reference TEXT,
+    received_by TEXT NOT NULL,
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Asegurar columnas en receivable_payments si ya existía
+ALTER TABLE public.receivable_payments ADD COLUMN IF NOT EXISTS reference TEXT;
+ALTER TABLE public.receivable_payments ADD COLUMN IF NOT EXISTS received_by TEXT NOT NULL DEFAULT 'Sistema';
+ALTER TABLE public.receivable_payments ADD COLUMN IF NOT EXISTS notes TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_pay_receivable_id ON public.receivable_payments(receivable_id);
+CREATE INDEX IF NOT EXISTS idx_pay_client_id ON public.receivable_payments(client_id);
 
 -- ==============================================================================
 -- HABILITACIÓN DE ROW LEVEL SECURITY (RLS) Y POLÍTICAS DE ACCESO
@@ -295,6 +400,8 @@ ALTER TABLE public.transfer_sheets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sale_notes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.system_config ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.accounts_receivable ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.receivable_payments ENABLE ROW LEVEL SECURITY;
 
 -- Políticas de lectura/escritura anónimas públicas para la App
 DROP POLICY IF EXISTS "Permitir todo a anon users" ON public.users;
@@ -339,6 +446,12 @@ CREATE POLICY "Permitir todo a anon audit_logs" ON public.audit_logs FOR ALL USI
 DROP POLICY IF EXISTS "Permitir todo a anon system_config" ON public.system_config;
 CREATE POLICY "Permitir todo a anon system_config" ON public.system_config FOR ALL USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Permitir todo a anon accounts_receivable" ON public.accounts_receivable;
+CREATE POLICY "Permitir todo a anon accounts_receivable" ON public.accounts_receivable FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Permitir todo a anon receivable_payments" ON public.receivable_payments;
+CREATE POLICY "Permitir todo a anon receivable_payments" ON public.receivable_payments FOR ALL USING (true) WITH CHECK (true);
+
 -- Permisos globales para anon y authenticated
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
@@ -365,26 +478,48 @@ ON CONFLICT (id) DO UPDATE SET
     active = EXCLUDED.active,
     permissions = EXCLUDED.permissions;
 
--- 2. MATERIAS PRIMAS E INSUMOS
-INSERT INTO public.raw_materials (id, name, sku, stock, unit, min_stock, cost_per_unit, lote_proveedor, expiry_date)
+-- 1.5 PROVEEDORES
+INSERT INTO public.suppliers (id, name, rfc, contact_name, email, phone, whatsapp, address, category, payment_terms, credit_days, credit_limit, current_debt, active, rating, notes)
 VALUES
-('mat-1', 'Harina de Trigo Extra Fina', 'MP-HARI-01', 1500, 'kg', 200, 18.0, 'PROV-HARI-901', '2027-06-30'),
-('mat-2', 'Azúcar Estándar Premium', 'MP-AZUC-02', 1200, 'kg', 150, 22.0, 'PROV-AZUC-554', '2027-12-15'),
-('mat-3', 'Grenetina Hidrolizada 290 Bloom', 'MP-GREN-03', 350, 'kg', 50, 140.0, 'PROV-GREN-302', '2028-04-10'),
-('mat-4', 'Cocoa en Polvo Alcalina', 'MP-COCO-04', 400, 'kg', 60, 110.0, 'PROV-COCO-112', '2027-09-22'),
-('mat-5', 'Esencia de Vainilla Concentrada', 'MP-VAIN-05', 150, 'L', 20, 95.0, 'PROV-SABO-880', '2028-02-18'),
-('mat-6', 'Colorante Rojo Fresa Grado Alimenticio', 'MP-COLR-06', 80, 'L', 15, 120.0, 'PROV-COLO-403', '2028-08-11'),
-('mat-7', 'Mantequilla sin Sal', 'MP-MANT-07', 600, 'kg', 80, 85.0, 'PROV-LACT-711', '2026-11-20'),
-('mat-8', 'Crema Chantilly para Batir', 'MP-CREM-08', 450, 'L', 60, 65.0, 'PROV-LACT-712', '2026-12-05'),
-('mat-9', 'Domo de Plástico para Pastel Grande', 'DES-DOMO-09', 300, 'pzs', 50, 15.0, 'PROV-DESE-220', '2030-01-01'),
-('mat-10', 'Capacillo para Cupcake #72', 'DES-CAPA-10', 8000, 'pzs', 1000, 0.15, 'PROV-DESE-221', '2030-01-01'),
-('mat-11', 'Charola de Cartón Dorada Redonda 30cm', 'DES-CHAR-11', 500, 'pzs', 100, 8.0, 'PROV-DESE-222', '2030-01-01'),
-('mat-12', 'Vaso de Plástico Cristal 12oz', 'DES-VASO-12', 4000, 'pzs', 500, 1.20, 'PROV-DESE-223', '2030-01-01'),
-('mat-13', 'Molde de Silicón para Gelatina Corona', 'UTE-MOLD-13', 120, 'pzs', 20, 75.0, 'PROV-UTEN-101', '2031-01-01'),
-('mat-14', 'Manga Pastelera Desechable con 6 Duyas', 'UTE-MANG-14', 250, 'pzs', 30, 45.0, 'PROV-UTEN-102', '2031-01-01'),
-('mat-15', 'Vela de Bengala Infantil de Cumpleaños', 'UTE-VELA-15', 600, 'pzs', 100, 12.0, 'PROV-DECO-330', '2029-01-01'),
-('pt-1', 'Mezcla Preparada para Pastel de Chocolate (Bolsa 1kg)', 'PT-MEZC-CH', 120, 'pzs', 20, 25.50, 'LOTE-REC-101', '2027-05-01'),
-('pt-2', 'Polvo Preparado para Gelatina de Fresa (Bolsa 1kg)', 'PT-GELA-FR', 85, 'pzs', 15, 34.20, 'LOTE-REC-102', '2027-04-15')
+('supp-1', 'Distribuidora Harinera del Centro', 'DHC980115XX1', 'Ing. Roberto Gómez', 'ventas@harineradelcentro.com', '477-889-1122', '4778891122', 'Parque Industrial Las Colinas, Silao, Gto.', 'Materia Prima', 'Crédito 30 días', 30, 80000, 15000, true, 5, 'Proveedor de harinas extra finas y mejoradores.'),
+('supp-2', 'Grenetinas Premium de Occidente', 'GPO040312BB2', 'Lic. Patricia Vega', 'contacto@grenetinasoccidente.com', '333-667-2244', '3336672244', 'Av. Solidaridad 1200, Zapopan, Jal.', 'Materia Prima', 'Crédito 15 días', 15, 50000, 25000, true, 5, 'Grenetina bloom alto y colágeno hidrolizado.'),
+('supp-3', 'Envases & Domos Plásticos del Bajío', 'EDP120820CC3', 'Carlos Santillán', 'pedidos@envasesbajio.com', '427-112-3344', '4271123344', 'Zona Industrial Valle de Oro, San Juan del Río, Qro.', 'Empaques', 'Contado', 0, 0, 0, true, 4, 'Domos, charolas doradas y capacillos.')
+ON CONFLICT (id) DO UPDATE SET 
+    name = EXCLUDED.name,
+    rfc = EXCLUDED.rfc,
+    contact_name = EXCLUDED.contact_name,
+    email = EXCLUDED.email,
+    phone = EXCLUDED.phone,
+    whatsapp = EXCLUDED.whatsapp,
+    address = EXCLUDED.address,
+    category = EXCLUDED.category,
+    payment_terms = EXCLUDED.payment_terms,
+    credit_days = EXCLUDED.credit_days,
+    credit_limit = EXCLUDED.credit_limit,
+    current_debt = EXCLUDED.current_debt,
+    active = EXCLUDED.active,
+    rating = EXCLUDED.rating;
+
+-- 2. MATERIAS PRIMAS E INSUMOS
+INSERT INTO public.raw_materials (id, name, sku, stock, unit, min_stock, cost_per_unit, sale_price, lote_proveedor, expiry_date)
+VALUES
+('mat-1', 'Harina de Trigo Extra Fina', 'MP-HARI-01', 1500, 'kg', 200, 18.0, 28.0, 'PROV-HARI-901', '2027-06-30'),
+('mat-2', 'Azúcar Estándar Premium', 'MP-AZUC-02', 1200, 'kg', 150, 22.0, 32.0, 'PROV-AZUC-554', '2027-12-15'),
+('mat-3', 'Grenetina Hidrolizada 290 Bloom', 'MP-GREN-03', 350, 'kg', 50, 140.0, 195.0, 'PROV-GREN-302', '2028-04-10'),
+('mat-4', 'Cocoa en Polvo Alcalina', 'MP-COCO-04', 400, 'kg', 60, 110.0, 155.0, 'PROV-COCO-112', '2027-09-22'),
+('mat-5', 'Esencia de Vainilla Concentrada', 'MP-VAIN-05', 150, 'L', 20, 95.0, 145.0, 'PROV-SABO-880', '2028-02-18'),
+('mat-6', 'Colorante Rojo Fresa Grado Alimenticio', 'MP-COLR-06', 80, 'L', 15, 120.0, 180.0, 'PROV-COLO-403', '2028-08-11'),
+('mat-7', 'Mantequilla sin Sal', 'MP-MANT-07', 600, 'kg', 80, 85.0, 125.0, 'PROV-LACT-711', '2026-11-20'),
+('mat-8', 'Crema Chantilly para Batir', 'MP-CREM-08', 450, 'L', 60, 65.0, 98.0, 'PROV-LACT-712', '2026-12-05'),
+('mat-9', 'Domo de Plástico para Pastel Grande', 'DES-DOMO-09', 300, 'pzs', 50, 15.0, 24.0, 'PROV-DESE-220', '2030-01-01'),
+('mat-10', 'Capacillo para Cupcake #72', 'DES-CAPA-10', 8000, 'pzs', 1000, 0.15, 0.35, 'PROV-DESE-221', '2030-01-01'),
+('mat-11', 'Charola de Cartón Dorada Redonda 30cm', 'DES-CHAR-11', 500, 'pzs', 100, 8.0, 15.0, 'PROV-DESE-222', '2030-01-01'),
+('mat-12', 'Vaso de Plástico Cristal 12oz', 'DES-VASO-12', 4000, 'pzs', 500, 1.20, 2.50, 'PROV-DESE-223', '2030-01-01'),
+('mat-13', 'Molde de Silicón para Gelatina Corona', 'UTE-MOLD-13', 120, 'pzs', 20, 75.0, 120.0, 'PROV-UTEN-101', '2031-01-01'),
+('mat-14', 'Manga Pastelera Desechable con 6 Duyas', 'UTE-MANG-14', 250, 'pzs', 30, 45.0, 75.0, 'PROV-UTEN-102', '2031-01-01'),
+('mat-15', 'Vela de Bengala Infantil de Cumpleaños', 'UTE-VELA-15', 600, 'pzs', 100, 12.0, 20.0, 'PROV-DECO-330', '2029-01-01'),
+('pt-1', 'Mezcla Preparada para Pastel de Chocolate (Bolsa 1kg)', 'PT-MEZC-CH', 120, 'pzs', 20, 25.50, 65.0, 'LOTE-REC-101', '2027-05-01'),
+('pt-2', 'Polvo Preparado para Gelatina de Fresa (Bolsa 1kg)', 'PT-GELA-FR', 85, 'pzs', 15, 34.20, 85.0, 'LOTE-REC-102', '2027-04-15')
 ON CONFLICT (id) DO UPDATE SET 
     name = EXCLUDED.name,
     sku = EXCLUDED.sku,
@@ -392,6 +527,7 @@ ON CONFLICT (id) DO UPDATE SET
     unit = EXCLUDED.unit,
     min_stock = EXCLUDED.min_stock,
     cost_per_unit = EXCLUDED.cost_per_unit,
+    sale_price = EXCLUDED.sale_price,
     lote_proveedor = EXCLUDED.lote_proveedor,
     expiry_date = EXCLUDED.expiry_date;
 
@@ -543,10 +679,591 @@ ON CONFLICT (id) DO UPDATE SET
     max_discount_distributor = EXCLUDED.max_discount_distributor,
     credit_days_allowed = EXCLUDED.credit_days_allowed;
 
+-- 14. CUENTAS POR COBRAR Y CARTERA DE CRÉDITO
+INSERT INTO public.accounts_receivable (id, folio, client_id, client_name, sale_id, concept, issue_date, due_date, credit_days, total_amount, amount_paid, remaining_balance, status, notes, active)
+VALUES
+('cxc-1', 'CXC-00101', 'cli-1', 'Pastelería "El Maná del Cielo"', 'vta-1', 'Venta a crédito de Insumos y Envases Pastelería (Factura CFDI 4A8B-91F2)', '2026-07-07', '2026-08-06', 30, 20000, 5000, 15000, 'parcial', 'Abono parcial recibido de $5,000 vía SPEI. Saldo restante de $15,000 en curso.', true),
+('cxc-2', 'CXC-00102', 'cli-2', 'Repostera Dulces Creaciones S.A.', 'vta-2', 'Suministro de Gelatinas y Moldes (Remisión R-204)', '2026-07-12', '2026-07-27', 15, 6500, 0, 6500, 'pendiente', 'Crédito a 15 días autorizado por ventas.', true),
+('cxc-3', 'CXC-00103', 'cli-4', 'Panificadora El Buen Trigo', 'vta-4', 'Pedido Harinas Extra Fina y Mejoradores Especiales', '2026-06-15', '2026-07-30', 45, 24000, 0, 24000, 'pendiente', 'Cliente en seguimiento de límite de crédito ($24,000 de $25,000).', true)
+ON CONFLICT (id) DO UPDATE SET 
+    folio = EXCLUDED.folio,
+    client_name = EXCLUDED.client_name,
+    concept = EXCLUDED.concept,
+    due_date = EXCLUDED.due_date,
+    credit_days = EXCLUDED.credit_days,
+    total_amount = EXCLUDED.total_amount,
+    amount_paid = EXCLUDED.amount_paid,
+    remaining_balance = EXCLUDED.remaining_balance,
+    status = EXCLUDED.status,
+    notes = EXCLUDED.notes,
+    active = EXCLUDED.active;
+
+-- 15. HISTORIAL DE PAGOS Y ABONOS
+INSERT INTO public.receivable_payments (id, receivable_id, client_id, date, amount, payment_method, reference, received_by, notes)
+VALUES
+('pay-1', 'cxc-1', 'cli-1', '2026-07-15', 5000, 'Transferencia SPEI', 'SPEI-BBVA-90812', 'Jonathan (Gerente)', 'Abono inicial a cuenta de factura 4A8B')
+ON CONFLICT (id) DO UPDATE SET 
+    amount = EXCLUDED.amount,
+    payment_method = EXCLUDED.payment_method,
+    reference = EXCLUDED.reference,
+    notes = EXCLUDED.notes;
+
 -- ==============================================================================
 -- FIN DEL SCRIPT SQL PARA SUPABASE
 -- ==============================================================================
 `;
+
+// Script SQL para vaciar datos de prueba / muestra directamente en Supabase
+export const SUPABASE_PURGE_SAMPLE_DATA_SQL = `-- ==============================================================================
+-- SCRIPT DE VACIADO TOTAL DE DATOS DE MUESTRA EN SUPABASE
+-- Ejecuta este script en el Editor SQL de Supabase para dejar tu base limpia
+-- ==============================================================================
+
+-- 1. Vaciar pagos y cartera de crédito
+DELETE FROM public.receivable_payments;
+DELETE FROM public.accounts_receivable;
+
+-- 2. Vaciar logística, entregas y ventas
+DELETE FROM public.delivery_routes;
+DELETE FROM public.sales;
+
+-- 3. Vaciar movimientos de kardex y órdenes de compra
+DELETE FROM public.stock_movements;
+DELETE FROM public.purchase_orders;
+
+-- 4. Vaciar traslados y notas de venta
+DELETE FROM public.transfer_sheets;
+DELETE FROM public.sale_notes;
+
+-- 5. Vaciar producción, recetas y materias primas
+DELETE FROM public.production_orders;
+DELETE FROM public.formulas;
+DELETE FROM public.raw_materials;
+
+-- 6. Vaciar clientes, proveedores y bitácora
+DELETE FROM public.clients;
+DELETE FROM public.suppliers;
+DELETE FROM public.audit_logs;
+
+-- 7. Eliminar usuarios demo conservando únicamente al Administrador
+DELETE FROM public.users WHERE role != 'admin';
+
+-- Reajustar configuración general a valores iniciales por defecto
+INSERT INTO public.system_config (id, max_discount_public, max_discount_wholesale, max_discount_distributor, credit_days_allowed)
+VALUES ('default', 5, 12, 20, 60)
+ON CONFLICT (id) DO UPDATE SET 
+    max_discount_public = EXCLUDED.max_discount_public,
+    max_discount_wholesale = EXCLUDED.max_discount_wholesale,
+    max_discount_distributor = EXCLUDED.max_discount_distributor,
+    credit_days_allowed = EXCLUDED.credit_days_allowed;
+
+-- ==============================================================================
+-- FIN DEL VACIADO - BASE DE DATOS LIMPIA Y LISTA PARA PRODUCCIÓN
+-- ==============================================================================
+`;
+
+// Script de Esquema Limpio (Solo Estructura + Admin, sin datos de muestra)
+export const SUPABASE_CLEAN_SQL_SCRIPT = `-- ==============================================================================
+-- ERP MATERIAS PRIMAS & INSUMOS - ESQUEMA LIMPIO PARA PRODUCCIÓN
+-- (Crea todas las 16 tablas, RLS, permisos y Administrador SIN datos de muestra)
+-- ==============================================================================
+
+-- 1. TABLA: USUARIOS (users)
+CREATE TABLE IF NOT EXISTS public.users (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    username TEXT UNIQUE NOT NULL,
+    email TEXT,
+    phone TEXT,
+    role TEXT NOT NULL CHECK (role IN ('admin', 'production', 'warehouse', 'sales', 'delivery')),
+    pin TEXT NOT NULL,
+    active BOOLEAN NOT NULL DEFAULT true,
+    permissions JSONB NOT NULL DEFAULT '[]'::jsonb,
+    avatar_url TEXT,
+    job_title TEXT,
+    department TEXT,
+    bio TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS job_title TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS department TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS bio TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS permissions JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+-- 2. TABLA: PROVEEDORES (suppliers)
+CREATE TABLE IF NOT EXISTS public.suppliers (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    rfc TEXT,
+    contact_name TEXT,
+    email TEXT,
+    phone TEXT,
+    whatsapp TEXT,
+    address TEXT,
+    category TEXT DEFAULT 'Materia Prima',
+    payment_terms TEXT DEFAULT 'Contado',
+    credit_days INTEGER NOT NULL DEFAULT 0,
+    credit_limit NUMERIC NOT NULL DEFAULT 0,
+    current_debt NUMERIC NOT NULL DEFAULT 0,
+    active BOOLEAN NOT NULL DEFAULT true,
+    rating INTEGER NOT NULL DEFAULT 5,
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.suppliers ADD COLUMN IF NOT EXISTS rfc TEXT;
+ALTER TABLE public.suppliers ADD COLUMN IF NOT EXISTS contact_name TEXT;
+ALTER TABLE public.suppliers ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE public.suppliers ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE public.suppliers ADD COLUMN IF NOT EXISTS whatsapp TEXT;
+ALTER TABLE public.suppliers ADD COLUMN IF NOT EXISTS address TEXT;
+
+-- 3. TABLA: INVENTARIO DE MATERIAS PRIMAS E INSUMOS (raw_materials)
+CREATE TABLE IF NOT EXISTS public.raw_materials (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    sku TEXT NOT NULL,
+    stock NUMERIC NOT NULL DEFAULT 0,
+    unit TEXT NOT NULL DEFAULT 'kg',
+    min_stock NUMERIC NOT NULL DEFAULT 0,
+    cost_per_unit NUMERIC NOT NULL DEFAULT 0,
+    sale_price NUMERIC,
+    lote_proveedor TEXT,
+    expiry_date DATE,
+    active BOOLEAN NOT NULL DEFAULT true,
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.raw_materials ADD COLUMN IF NOT EXISTS sku TEXT;
+ALTER TABLE public.raw_materials ADD COLUMN IF NOT EXISTS stock NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE public.raw_materials ADD COLUMN IF NOT EXISTS unit TEXT NOT NULL DEFAULT 'kg';
+ALTER TABLE public.raw_materials ADD COLUMN IF NOT EXISTS min_stock NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE public.raw_materials ADD COLUMN IF NOT EXISTS cost_per_unit NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE public.raw_materials ADD COLUMN IF NOT EXISTS sale_price NUMERIC;
+ALTER TABLE public.raw_materials ADD COLUMN IF NOT EXISTS lote_proveedor TEXT;
+ALTER TABLE public.raw_materials ADD COLUMN IF NOT EXISTS expiry_date DATE;
+ALTER TABLE public.raw_materials ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE public.raw_materials ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE public.raw_materials DROP CONSTRAINT IF EXISTS raw_materials_unit_check;
+CREATE INDEX IF NOT EXISTS idx_raw_materials_sku ON public.raw_materials(sku);
+CREATE INDEX IF NOT EXISTS idx_raw_materials_active ON public.raw_materials(active);
+
+-- 4. TABLA: FÓRMULAS Y RECETAS (formulas)
+CREATE TABLE IF NOT EXISTS public.formulas (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    batch_size_liters NUMERIC NOT NULL DEFAULT 100,
+    ingredients JSONB NOT NULL DEFAULT '[]'::jsonb,
+    packaging JSONB NOT NULL DEFAULT '[]'::jsonb,
+    labor_cost NUMERIC NOT NULL DEFAULT 0,
+    other_cost NUMERIC NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 5. TABLA: ÓRDENES DE PRODUCCIÓN (production_orders)
+CREATE TABLE IF NOT EXISTS public.production_orders (
+    id TEXT PRIMARY KEY,
+    lote TEXT,
+    formula_id TEXT REFERENCES public.formulas(id) ON DELETE SET NULL,
+    quantity_liters NUMERIC NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    started_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,
+    pre_check_passed BOOLEAN NOT NULL DEFAULT false,
+    notes TEXT,
+    operator TEXT NOT NULL,
+    qa_check JSONB
+);
+
+-- 6. TABLA: CLIENTES Y CRÉDITOS (clients)
+CREATE TABLE IF NOT EXISTS public.clients (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    rfc TEXT,
+    email TEXT,
+    phone TEXT,
+    whatsapp TEXT,
+    address TEXT,
+    price_list TEXT NOT NULL DEFAULT 'Público',
+    credit_days INTEGER NOT NULL DEFAULT 0,
+    credit_limit NUMERIC NOT NULL DEFAULT 0,
+    current_debt NUMERIC NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS rfc TEXT;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS whatsapp TEXT;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS address TEXT;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS price_list TEXT NOT NULL DEFAULT 'Público';
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS credit_days INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS credit_limit NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS current_debt NUMERIC NOT NULL DEFAULT 0;
+
+-- 7. TABLA: VENTAS Y COTIZACIONES (sales)
+CREATE TABLE IF NOT EXISTS public.sales (
+    id TEXT PRIMARY KEY,
+    client_id TEXT REFERENCES public.clients(id) ON DELETE SET NULL,
+    client_name TEXT NOT NULL,
+    items JSONB NOT NULL DEFAULT '[]'::jsonb,
+    subtotal NUMERIC NOT NULL DEFAULT 0,
+    tax NUMERIC NOT NULL DEFAULT 0,
+    total NUMERIC NOT NULL DEFAULT 0,
+    payment_type TEXT NOT NULL DEFAULT 'Contado',
+    status TEXT NOT NULL DEFAULT 'Cotización',
+    billing_type TEXT NOT NULL DEFAULT 'Remisión',
+    cfdi_status TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    credit_days_left INTEGER,
+    amount_paid NUMERIC NOT NULL DEFAULT 0
+);
+
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS client_id TEXT;
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS client_name TEXT;
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS items JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS payment_type TEXT NOT NULL DEFAULT 'Contado';
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'Cotización';
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS billing_type TEXT NOT NULL DEFAULT 'Remisión';
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS cfdi_status TEXT;
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS credit_days_left INTEGER;
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS amount_paid NUMERIC NOT NULL DEFAULT 0;
+
+-- 8. TABLA: RUTAS DE ENTREGA Y LOGÍSTICA (delivery_routes)
+CREATE TABLE IF NOT EXISTS public.delivery_routes (
+    id TEXT PRIMARY KEY,
+    sale_id TEXT REFERENCES public.sales(id) ON DELETE CASCADE,
+    client_name TEXT NOT NULL,
+    address TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pendiente',
+    delivered_at TIMESTAMPTZ,
+    evidence_signature TEXT,
+    evidence_photo TEXT,
+    payment_collected NUMERIC DEFAULT 0,
+    payment_method TEXT,
+    items_summary TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 9. TABLA: MOVIMIENTOS DE KARDEX / ALMACÉN (stock_movements)
+CREATE TABLE IF NOT EXISTS public.stock_movements (
+    id TEXT PRIMARY KEY,
+    material_id TEXT REFERENCES public.raw_materials(id) ON DELETE SET NULL,
+    type TEXT NOT NULL,
+    quantity NUMERIC NOT NULL,
+    date TIMESTAMPTZ NOT NULL DEFAULT now(),
+    lote TEXT,
+    lote_proveedor TEXT,
+    user_name TEXT NOT NULL,
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 10. TABLA: ÓRDENES DE COMPRA / PROCUREMENT (purchase_orders)
+CREATE TABLE IF NOT EXISTS public.purchase_orders (
+    id TEXT PRIMARY KEY,
+    supplier_name TEXT NOT NULL,
+    items JSONB NOT NULL DEFAULT '[]'::jsonb,
+    subtotal NUMERIC NOT NULL DEFAULT 0,
+    tax NUMERIC NOT NULL DEFAULT 0,
+    total NUMERIC NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'draft',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    received_at TIMESTAMPTZ,
+    invoice_number TEXT
+);
+
+-- 11. TABLA: HOJAS DE TRASLADO DE PRODUCTOS (transfer_sheets)
+CREATE TABLE IF NOT EXISTS public.transfer_sheets (
+    id TEXT PRIMARY KEY,
+    folio TEXT NOT NULL,
+    date DATE NOT NULL,
+    expedited_in TEXT,
+    elaborated_by TEXT,
+    client_name TEXT NOT NULL,
+    destination TEXT NOT NULL,
+    address TEXT,
+    cp TEXT,
+    colonia TEXT,
+    fiscal_regimen TEXT,
+    phone TEXT,
+    client_no TEXT,
+    rfc TEXT,
+    curp TEXT,
+    payment_form TEXT,
+    operator TEXT,
+    plate_no TEXT,
+    items JSONB NOT NULL DEFAULT '[]'::jsonb,
+    subtotal NUMERIC NOT NULL DEFAULT 0,
+    tax NUMERIC NOT NULL DEFAULT 0,
+    total NUMERIC NOT NULL DEFAULT 0,
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 12. TABLA: NOTAS DE VENTA MIAULOO (sale_notes)
+CREATE TABLE IF NOT EXISTS public.sale_notes (
+    id TEXT PRIMARY KEY,
+    note_no TEXT NOT NULL,
+    date DATE NOT NULL,
+    client_name TEXT NOT NULL,
+    phone TEXT,
+    city TEXT,
+    items JSONB NOT NULL DEFAULT '[]'::jsonb,
+    subtotal NUMERIC NOT NULL DEFAULT 0,
+    tax NUMERIC NOT NULL DEFAULT 0,
+    total NUMERIC NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 13. TABLA: BITÁCORA DE AUDITORÍA (audit_logs)
+CREATE TABLE IF NOT EXISTS public.audit_logs (
+    id TEXT PRIMARY KEY,
+    user_name TEXT NOT NULL,
+    action TEXT NOT NULL,
+    module TEXT NOT NULL,
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT now(),
+    details TEXT
+);
+
+-- 14. TABLA: CONFIGURACIÓN GENERAL DEL SISTEMA (system_config)
+DROP TABLE IF EXISTS public.system_config CASCADE;
+CREATE TABLE public.system_config (
+    id TEXT PRIMARY KEY DEFAULT 'default',
+    max_discount_public NUMERIC NOT NULL DEFAULT 5,
+    max_discount_wholesale NUMERIC NOT NULL DEFAULT 12,
+    max_discount_distributor NUMERIC NOT NULL DEFAULT 20,
+    credit_days_allowed INTEGER NOT NULL DEFAULT 60,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 15. TABLA: CUENTAS POR COBRAR Y CARTERA DE CRÉDITO (accounts_receivable)
+CREATE TABLE IF NOT EXISTS public.accounts_receivable (
+    id TEXT PRIMARY KEY,
+    folio TEXT NOT NULL,
+    client_id TEXT REFERENCES public.clients(id) ON DELETE SET NULL,
+    client_name TEXT NOT NULL,
+    sale_id TEXT,
+    concept TEXT NOT NULL,
+    issue_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    due_date DATE NOT NULL,
+    credit_days INTEGER NOT NULL DEFAULT 30,
+    total_amount NUMERIC NOT NULL DEFAULT 0,
+    amount_paid NUMERIC NOT NULL DEFAULT 0,
+    remaining_balance NUMERIC NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'pendiente' CHECK (status IN ('pendiente', 'parcial', 'liquidado', 'vencido', 'cancelado')),
+    notes TEXT,
+    active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS folio TEXT;
+ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS client_id TEXT;
+ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS client_name TEXT;
+ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS sale_id TEXT;
+ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS concept TEXT;
+ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS issue_date DATE NOT NULL DEFAULT CURRENT_DATE;
+ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS due_date DATE;
+ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS credit_days INTEGER NOT NULL DEFAULT 30;
+ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS total_amount NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS amount_paid NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS remaining_balance NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pendiente';
+ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE public.accounts_receivable ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+CREATE INDEX IF NOT EXISTS idx_cxc_client_id ON public.accounts_receivable(client_id);
+CREATE INDEX IF NOT EXISTS idx_cxc_status ON public.accounts_receivable(status);
+CREATE INDEX IF NOT EXISTS idx_cxc_due_date ON public.accounts_receivable(due_date);
+
+-- 16. TABLA: REGISTRO DE PAGOS Y ABONOS (receivable_payments)
+CREATE TABLE IF NOT EXISTS public.receivable_payments (
+    id TEXT PRIMARY KEY,
+    receivable_id TEXT REFERENCES public.accounts_receivable(id) ON DELETE CASCADE,
+    client_id TEXT REFERENCES public.clients(id) ON DELETE SET NULL,
+    date DATE NOT NULL DEFAULT CURRENT_DATE,
+    amount NUMERIC NOT NULL DEFAULT 0,
+    payment_method TEXT NOT NULL DEFAULT 'Efectivo',
+    reference TEXT,
+    received_by TEXT NOT NULL,
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.receivable_payments ADD COLUMN IF NOT EXISTS reference TEXT;
+ALTER TABLE public.receivable_payments ADD COLUMN IF NOT EXISTS received_by TEXT NOT NULL DEFAULT 'Sistema';
+ALTER TABLE public.receivable_payments ADD COLUMN IF NOT EXISTS notes TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_pay_receivable_id ON public.receivable_payments(receivable_id);
+CREATE INDEX IF NOT EXISTS idx_pay_client_id ON public.receivable_payments(client_id);
+
+-- ROW LEVEL SECURITY (RLS)
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.suppliers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.raw_materials ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.formulas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.production_orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.clients ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sales ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.delivery_routes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.stock_movements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.purchase_orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.transfer_sheets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sale_notes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.system_config ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.accounts_receivable ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.receivable_payments ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Permitir todo a anon users" ON public.users;
+CREATE POLICY "Permitir todo a anon users" ON public.users FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Permitir todo a anon suppliers" ON public.suppliers;
+CREATE POLICY "Permitir todo a anon suppliers" ON public.suppliers FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Permitir todo a anon raw_materials" ON public.raw_materials;
+CREATE POLICY "Permitir todo a anon raw_materials" ON public.raw_materials FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Permitir todo a anon formulas" ON public.formulas;
+CREATE POLICY "Permitir todo a anon formulas" ON public.formulas FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Permitir todo a anon production_orders" ON public.production_orders;
+CREATE POLICY "Permitir todo a anon production_orders" ON public.production_orders FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Permitir todo a anon clients" ON public.clients;
+CREATE POLICY "Permitir todo a anon clients" ON public.clients FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Permitir todo a anon sales" ON public.sales;
+CREATE POLICY "Permitir todo a anon sales" ON public.sales FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Permitir todo a anon delivery_routes" ON public.delivery_routes;
+CREATE POLICY "Permitir todo a anon delivery_routes" ON public.delivery_routes FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Permitir todo a anon stock_movements" ON public.stock_movements;
+CREATE POLICY "Permitir todo a anon stock_movements" ON public.stock_movements FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Permitir todo a anon purchase_orders" ON public.purchase_orders;
+CREATE POLICY "Permitir todo a anon purchase_orders" ON public.purchase_orders FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Permitir todo a anon transfer_sheets" ON public.transfer_sheets;
+CREATE POLICY "Permitir todo a anon transfer_sheets" ON public.transfer_sheets FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Permitir todo a anon sale_notes" ON public.sale_notes;
+CREATE POLICY "Permitir todo a anon sale_notes" ON public.sale_notes FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Permitir todo a anon audit_logs" ON public.audit_logs;
+CREATE POLICY "Permitir todo a anon audit_logs" ON public.audit_logs FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Permitir todo a anon system_config" ON public.system_config;
+CREATE POLICY "Permitir todo a anon system_config" ON public.system_config FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Permitir todo a anon accounts_receivable" ON public.accounts_receivable;
+CREATE POLICY "Permitir todo a anon accounts_receivable" ON public.accounts_receivable FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Permitir todo a anon receivable_payments" ON public.receivable_payments;
+CREATE POLICY "Permitir todo a anon receivable_payments" ON public.receivable_payments FOR ALL USING (true) WITH CHECK (true);
+
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated;
+
+-- ÚNICOS REGISTROS FUNDAMENTALES:
+-- 1. Usuario Administrador Maestro
+INSERT INTO public.users (id, name, username, email, phone, role, pin, active, permissions, job_title, department)
+VALUES
+('usr-1', 'Jonathan (Admin)', 'admin', 'gerencia@miauloo.com', '5512345678', 'admin', '1234', true, '["*"]'::jsonb, 'Director General', 'Dirección')
+ON CONFLICT (id) DO UPDATE SET 
+    name = EXCLUDED.name,
+    role = EXCLUDED.role,
+    pin = EXCLUDED.pin,
+    active = EXCLUDED.active;
+
+-- 2. Configuración General del Sistema
+INSERT INTO public.system_config (id, max_discount_public, max_discount_wholesale, max_discount_distributor, credit_days_allowed)
+VALUES
+('default', 5, 12, 20, 60)
+ON CONFLICT (id) DO UPDATE SET 
+    max_discount_public = EXCLUDED.max_discount_public,
+    max_discount_wholesale = EXCLUDED.max_discount_wholesale,
+    max_discount_distributor = EXCLUDED.max_discount_distributor,
+    credit_days_allowed = EXCLUDED.credit_days_allowed;
+
+-- ==============================================================================
+-- FIN DEL ESQUEMA LIMPIO PARA PRODUCCIÓN (Listo para registrar productos reales)
+-- ==============================================================================
+`;
+
+// Función para purgar/vaciar todos los datos de muestra en Supabase Cloud
+export async function clearSampleDataFromSupabase(keepAdmin = true): Promise<{ success: boolean; message: string; details?: any }> {
+  try {
+    const results: Record<string, any> = {};
+
+    // 1. Pagos y Cartera
+    const { error: errPay } = await supabase.from('receivable_payments').delete().neq('id', '___safe_key___');
+    results.receivable_payments = errPay ? errPay.message : 'OK (Vaciado)';
+
+    const { error: errCxc } = await supabase.from('accounts_receivable').delete().neq('id', '___safe_key___');
+    results.accounts_receivable = errCxc ? errCxc.message : 'OK (Vaciado)';
+
+    // 2. Rutas y Ventas
+    const { error: errRoutes } = await supabase.from('delivery_routes').delete().neq('id', '___safe_key___');
+    results.delivery_routes = errRoutes ? errRoutes.message : 'OK (Vaciado)';
+
+    const { error: errSales } = await supabase.from('sales').delete().neq('id', '___safe_key___');
+    results.sales = errSales ? errSales.message : 'OK (Vaciado)';
+
+    // 3. Kardex y Compras
+    const { error: errMov } = await supabase.from('stock_movements').delete().neq('id', '___safe_key___');
+    results.stock_movements = errMov ? errMov.message : 'OK (Vaciado)';
+
+    const { error: errPo } = await supabase.from('purchase_orders').delete().neq('id', '___safe_key___');
+    results.purchase_orders = errPo ? errPo.message : 'OK (Vaciado)';
+
+    // 4. Traslados y Notas
+    const { error: errTs } = await supabase.from('transfer_sheets').delete().neq('id', '___safe_key___');
+    results.transfer_sheets = errTs ? errTs.message : 'OK (Vaciado)';
+
+    const { error: errSn } = await supabase.from('sale_notes').delete().neq('id', '___safe_key___');
+    results.sale_notes = errSn ? errSn.message : 'OK (Vaciado)';
+
+    // 5. Producción, Recetas y Materias Primas
+    const { error: errProd } = await supabase.from('production_orders').delete().neq('id', '___safe_key___');
+    results.production_orders = errProd ? errProd.message : 'OK (Vaciado)';
+
+    const { error: errForm } = await supabase.from('formulas').delete().neq('id', '___safe_key___');
+    results.formulas = errForm ? errForm.message : 'OK (Vaciado)';
+
+    const { error: errMat } = await supabase.from('raw_materials').delete().neq('id', '___safe_key___');
+    results.raw_materials = errMat ? errMat.message : 'OK (Vaciado)';
+
+    // 6. Directorio Clientes, Proveedores y Auditoría
+    const { error: errCli } = await supabase.from('clients').delete().neq('id', '___safe_key___');
+    results.clients = errCli ? errCli.message : 'OK (Vaciado)';
+
+    const { error: errSupp } = await supabase.from('suppliers').delete().neq('id', '___safe_key___');
+    results.suppliers = errSupp ? errSupp.message : 'OK (Vaciado)';
+
+    const { error: errAud } = await supabase.from('audit_logs').delete().neq('id', '___safe_key___');
+    results.audit_logs = errAud ? errAud.message : 'OK (Vaciado)';
+
+    // 7. Usuarios (conservar administrador para no perder acceso)
+    if (keepAdmin) {
+      const { error: errUsers } = await supabase.from('users').delete().neq('role', 'admin');
+      results.users = errUsers ? errUsers.message : 'OK (Admin preservado)';
+    } else {
+      const { error: errUsers } = await supabase.from('users').delete().neq('id', '___safe_key___');
+      results.users = errUsers ? errUsers.message : 'OK (Vaciado)';
+    }
+
+    return {
+      success: true,
+      message: 'Todos los datos de muestra fueron eliminados permanentemente de Supabase.',
+      details: results
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      message: error?.message || 'Error al conectar con Supabase para vaciar datos.',
+      details: error
+    };
+  }
+}
 
 // Helper for seeding all data into Supabase via REST API
 export async function seedSupabaseFromClient(): Promise<{ success: boolean; message: string; details?: any }> {
@@ -802,6 +1519,59 @@ export async function seedSupabaseFromClient(): Promise<{ success: boolean; mess
       }))
     );
     results.suppliers = errSupp ? errSupp.message : 'OK';
+
+    // 14. Accounts Receivable
+    const { error: errCxc } = await supabase.from('accounts_receivable').upsert(
+      INITIAL_ACCOUNTS_RECEIVABLE.map(c => ({
+        id: c.id,
+        folio: c.folio,
+        client_id: c.clientId,
+        client_name: c.clientName,
+        sale_id: c.saleId || null,
+        concept: c.concept,
+        issue_date: c.issueDate,
+        due_date: c.dueDate,
+        credit_days: c.creditDays,
+        total_amount: c.totalAmount,
+        amount_paid: c.amountPaid,
+        remaining_balance: c.remainingBalance,
+        status: c.status,
+        notes: c.notes || null,
+        active: c.active !== undefined ? c.active : true,
+        created_at: c.createdAt || new Date().toISOString()
+      }))
+    );
+    results.accounts_receivable = errCxc ? errCxc.message : 'OK';
+
+    // 15. Receivable Payments
+    const { error: errPay } = await supabase.from('receivable_payments').upsert(
+      INITIAL_RECEIVABLE_PAYMENTS.map(p => ({
+        id: p.id,
+        receivable_id: p.receivableId,
+        client_id: p.clientId || null,
+        date: p.date,
+        amount: p.amount,
+        payment_method: p.paymentMethod,
+        reference: p.reference || null,
+        received_by: p.receivedBy,
+        notes: p.notes || null,
+        created_at: p.createdAt || new Date().toISOString()
+      }))
+    );
+    results.receivable_payments = errPay ? errPay.message : 'OK';
+
+    // 16. System Config
+    const sysConf = MockDatabase.getSystemConfig();
+    const { error: errConf } = await supabase.from('system_config').upsert({
+      id: 'default',
+      max_discount_public: sysConf.maxDiscountPublic,
+      max_discount_wholesale: sysConf.maxDiscountWholesale,
+      max_discount_distributor: sysConf.maxDiscountDistributor,
+      credit_days_allowed: sysConf.creditDaysAllowed,
+      updated_at: new Date().toISOString()
+    });
+    results.system_config = errConf ? errConf.message : 'OK';
+
 
     // Check if any major error occurred (likely table doesn't exist yet before SQL is run)
     const errors = Object.entries(results).filter(([_, v]) => v !== 'OK');
@@ -1159,8 +1929,11 @@ export async function fetchRawMaterialsFromSupabase(): Promise<{ success: boolea
       unit: m.unit || 'kg',
       minStock: Number(m.min_stock || 0),
       costPerUnit: Number(m.cost_per_unit || 0),
+      salePrice: m.sale_price !== null && m.sale_price !== undefined ? Number(m.sale_price) : undefined,
       loteProveedor: m.lote_proveedor || '',
-      expiryDate: m.expiry_date || ''
+      expiryDate: m.expiry_date || '',
+      active: m.active !== undefined ? Boolean(m.active) : true,
+      notes: m.notes || ''
     }));
 
     return { success: true, data: formatted };
@@ -1180,8 +1953,11 @@ export async function saveRawMaterialToSupabase(material: RawMaterial): Promise<
       unit: material.unit,
       min_stock: material.minStock,
       cost_per_unit: material.costPerUnit,
+      sale_price: material.salePrice !== undefined ? material.salePrice : null,
       lote_proveedor: material.loteProveedor || null,
       expiry_date: material.expiryDate || null,
+      active: material.active !== undefined ? material.active : true,
+      notes: material.notes || null,
       created_at: new Date().toISOString()
     });
 
@@ -1668,5 +2444,176 @@ export async function deleteDeliveryRouteInSupabase(routeId: string): Promise<{ 
     return { success: false, error: e?.message || 'Error al eliminar ruta de entrega' };
   }
 }
+
+// ==============================================================================
+// CUENTAS POR COBRAR (ACCOUNTS RECEIVABLE) CRUD & SYNC
+// ==============================================================================
+
+export async function fetchAccountsReceivableFromSupabase(): Promise<{ success: boolean; data?: AccountReceivable[]; error?: string }> {
+  try {
+    const { data, error } = await supabase
+      .from('accounts_receivable')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    // Also fetch all payments to associate them
+    const { data: paymentsData } = await supabase
+      .from('receivable_payments')
+      .select('*')
+      .order('date', { ascending: true });
+
+    const paymentsByReceivable = new Map<string, ReceivablePayment[]>();
+    (paymentsData || []).forEach((p: any) => {
+      const pay: ReceivablePayment = {
+        id: p.id,
+        receivableId: p.receivable_id,
+        clientId: p.client_id || undefined,
+        date: p.date,
+        amount: Number(p.amount || 0),
+        paymentMethod: p.payment_method || 'Efectivo',
+        reference: p.reference || '',
+        receivedBy: p.received_by || '',
+        notes: p.notes || '',
+        createdAt: p.created_at || new Date().toISOString()
+      };
+      const list = paymentsByReceivable.get(p.receivable_id) || [];
+      list.push(pay);
+      paymentsByReceivable.set(p.receivable_id, list);
+    });
+
+    const formatted: AccountReceivable[] = (data || []).map((ar: any) => ({
+      id: ar.id,
+      folio: ar.folio,
+      clientId: ar.client_id,
+      clientName: ar.client_name,
+      saleId: ar.sale_id || undefined,
+      concept: ar.concept,
+      issueDate: ar.issue_date,
+      dueDate: ar.due_date,
+      creditDays: Number(ar.credit_days || 30),
+      totalAmount: Number(ar.total_amount || 0),
+      amountPaid: Number(ar.amount_paid || 0),
+      remainingBalance: Number(ar.remaining_balance || 0),
+      status: ar.status || 'pendiente',
+      notes: ar.notes || '',
+      payments: paymentsByReceivable.get(ar.id) || [],
+      active: ar.active !== undefined ? Boolean(ar.active) : true,
+      createdAt: ar.created_at || new Date().toISOString(),
+      updatedAt: ar.updated_at || undefined
+    }));
+
+    return { success: true, data: formatted };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Error al obtener cuentas por cobrar' };
+  }
+}
+
+export async function saveAccountReceivableToSupabase(ar: AccountReceivable): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.from('accounts_receivable').upsert({
+      id: ar.id,
+      folio: ar.folio,
+      client_id: ar.clientId,
+      client_name: ar.clientName,
+      sale_id: ar.saleId || null,
+      concept: ar.concept,
+      issue_date: ar.issueDate,
+      due_date: ar.dueDate,
+      credit_days: ar.creditDays,
+      total_amount: ar.totalAmount,
+      amount_paid: ar.amountPaid,
+      remaining_balance: ar.remainingBalance,
+      status: ar.status,
+      notes: ar.notes || null,
+      active: ar.active !== undefined ? ar.active : true,
+      created_at: ar.createdAt || new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    });
+
+    if (error) throw error;
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Error al guardar cuenta por cobrar' };
+  }
+}
+
+export async function deleteAccountReceivableInSupabase(arId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Delete payments first if not set to cascade
+    await supabase.from('receivable_payments').delete().eq('receivable_id', arId);
+    const { error } = await supabase.from('accounts_receivable').delete().eq('id', arId);
+    if (error) throw error;
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Error al eliminar cuenta por cobrar' };
+  }
+}
+
+// ==============================================================================
+// PAGOS Y ABONOS (RECEIVABLE PAYMENTS) CRUD & SYNC
+// ==============================================================================
+
+export async function fetchReceivablePaymentsFromSupabase(receivableId?: string): Promise<{ success: boolean; data?: ReceivablePayment[]; error?: string }> {
+  try {
+    let query = supabase.from('receivable_payments').select('*').order('date', { ascending: false });
+    if (receivableId) {
+      query = query.eq('receivable_id', receivableId);
+    }
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const formatted: ReceivablePayment[] = (data || []).map((p: any) => ({
+      id: p.id,
+      receivableId: p.receivable_id,
+      clientId: p.client_id || undefined,
+      date: p.date,
+      amount: Number(p.amount || 0),
+      paymentMethod: p.payment_method || 'Efectivo',
+      reference: p.reference || '',
+      receivedBy: p.received_by || '',
+      notes: p.notes || '',
+      createdAt: p.created_at || new Date().toISOString()
+    }));
+
+    return { success: true, data: formatted };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Error al obtener pagos de clientes' };
+  }
+}
+
+export async function saveReceivablePaymentToSupabase(pay: ReceivablePayment): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.from('receivable_payments').upsert({
+      id: pay.id,
+      receivable_id: pay.receivableId,
+      client_id: pay.clientId || null,
+      date: pay.date,
+      amount: pay.amount,
+      payment_method: pay.paymentMethod,
+      reference: pay.reference || null,
+      received_by: pay.receivedBy,
+      notes: pay.notes || null,
+      created_at: pay.createdAt || new Date().toISOString()
+    });
+
+    if (error) throw error;
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Error al guardar abono de cliente' };
+  }
+}
+
+export async function deleteReceivablePaymentInSupabase(payId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.from('receivable_payments').delete().eq('id', payId);
+    if (error) throw error;
+    return { success: true };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'Error al eliminar pago' };
+  }
+}
+
 
 

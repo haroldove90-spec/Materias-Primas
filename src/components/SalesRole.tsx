@@ -1,15 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ShoppingCart, Users, FileCheck, DollarSign, Plus, Minus, 
   Trash2, FileText, Landmark, RefreshCw, Send, CheckCircle, AlertTriangle,
-  Truck, Receipt, Eye, Printer, Download, Save, Search, X, Building, Phone, MapPin
+  Truck, Receipt, Eye, Printer, Download, Save, Search, X, Building, Phone, MapPin,
+  Package, Edit, PlusCircle, MinusCircle, CheckCircle2, Sliders, ToggleLeft, ToggleRight, Layers, Tag, Calendar
 } from 'lucide-react';
 import { MockDatabase } from '../data';
-import { RawMaterial, Client, Sale, OrderItem, DeliveryRoute, User, TransferSheet, TransferSheetItem, SaleNote, SaleNoteItem } from '../types';
+import { RawMaterial, Client, Sale, OrderItem, DeliveryRoute, User, TransferSheet, TransferSheetItem, SaleNote, SaleNoteItem, AccountReceivable } from '../types';
 import { exportToExcel, exportToPDF } from '../utils/exportUtils';
 import { recordSaveTelemetry } from '../services/supabaseTelemetry';
+import { 
+  saveRawMaterialToSupabase, 
+  deleteRawMaterialInSupabase, 
+  saveAccountReceivableToSupabase 
+} from '../services/supabaseService';
 import { SaleNotesManager } from './SaleNotesManager';
 import { TransferSheetsManager } from './TransferSheetsManager';
+import { ClientsManager } from './ClientsManager';
+import { AccountsReceivableManager } from './AccountsReceivableManager';
+import { SalesOrdersManager } from './SalesOrdersManager';
+import { AdminRawMaterialsManager } from './AdminRawMaterialsManager';
 
 interface SalesRoleProps {
   onBack: () => void;
@@ -28,6 +38,34 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
   const [internalActiveTab, setInternalActiveTab] = useState<'pos' | 'crm' | 'cobranza' | 'traslado' | 'notas'>('pos');
   const activeTab = propsActiveTab || internalActiveTab;
   const setActiveTab = propsSetActiveTab || setInternalActiveTab;
+  const [posSubView, setPosSubView] = useState<'pos' | 'products' | 'history'>('pos');
+  const [catalogCategory, setCatalogCategory] = useState<'all' | 'finished' | 'raw' | 'in_stock'>('all');
+  const [posSearchTerm, setPosSearchTerm] = useState('');
+  const [productQuantities, setProductQuantities] = useState<Record<string, number>>({});
+  const [posFeedback, setPosFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Modals for Products / Raw Materials in POS
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<RawMaterial | null>(null);
+  const [viewingProduct, setViewingProduct] = useState<RawMaterial | null>(null);
+  const [showAdjustModal, setShowAdjustModal] = useState(false);
+  const [adjustingProduct, setAdjustingProduct] = useState<RawMaterial | null>(null);
+  const [adjustType, setAdjustType] = useState<'add' | 'remove' | 'set'>('add');
+  const [adjustQty, setAdjustQty] = useState<number>(0);
+  const [adjustReason, setAdjustReason] = useState('Ajuste de inventario en mostrador');
+
+  // Form fields for Product / Raw Material
+  const [prodName, setProdName] = useState('');
+  const [prodSku, setProdSku] = useState('');
+  const [prodStock, setProdStock] = useState<number>(0);
+  const [prodUnit, setProdUnit] = useState<'kg' | 'L' | 'pzs'>('kg');
+  const [prodMinStock, setProdMinStock] = useState<number>(10);
+  const [prodCost, setProdCost] = useState<number>(0);
+  const [prodSalePrice, setProdSalePrice] = useState<number>(0);
+  const [prodLote, setProdLote] = useState('');
+  const [prodExpiry, setProdExpiry] = useState('');
+  const [prodActive, setProdActive] = useState(true);
+  const [prodNotes, setProdNotes] = useState('');
   
   // POS Cart State
   const [cartClientId, setCartClientId] = useState('');
@@ -110,15 +148,13 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
     loadDatabase();
   }, []);
 
-  // Catálogo de Productos Terminados para la venta
-  const finishedProducts = materials.filter(m => m.id.startsWith('pt'));
-
-  // Precios Base (Público General)
+  // Precios Base (Público General / Mostrador)
   const getBasePrices = (prodId: string) => {
-    // pt-1: Mezcla Preparada para Pastel de Chocolate (Bolsa 1kg) -> Público $65
-    // pt-2: Polvo Preparado para Gelatina de Fresa (Bolsa 1kg) -> Público $85
+    const mat = materials.find(m => m.id === prodId);
+    if (mat && mat.salePrice && mat.salePrice > 0) return mat.salePrice;
     if (prodId === 'pt-1') return 65;
     if (prodId === 'pt-2') return 85;
+    if (mat && mat.costPerUnit > 0) return Math.round(mat.costPerUnit * 1.35 * 100) / 100;
     return 150; // default fallback
   };
 
@@ -129,11 +165,234 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
     if (!client) return basePrice;
 
     if (client.priceList === 'Distribuidor') {
-      return basePrice * 0.80; // 20% descuento
+      return Math.round(basePrice * 0.80 * 100) / 100; // 20% descuento
     } else if (client.priceList === 'Mayoreo') {
-      return basePrice * 0.88; // 12% descuento
+      return Math.round(basePrice * 0.88 * 100) / 100; // 12% descuento
     }
     return basePrice; // Público
+  };
+
+  // Catálogo de productos y materias primas filtrados para POS
+  const filteredCatalogProducts = useMemo(() => {
+    return materials.filter(m => {
+      // Filtro de categoría
+      if (catalogCategory === 'finished') {
+        const isFinished = m.id.startsWith('pt') || m.sku.startsWith('PT') || (m.unit === 'pzs' && !m.id.startsWith('mp'));
+        if (!isFinished) return false;
+      } else if (catalogCategory === 'raw') {
+        const isRaw = m.id.startsWith('mp') || m.sku.startsWith('MP') || m.unit === 'kg' || m.unit === 'L';
+        if (!isRaw) return false;
+      } else if (catalogCategory === 'in_stock') {
+        if (m.stock <= 0) return false;
+      }
+
+      // Filtro de búsqueda por nombre, código interno (SKU) o lote
+      if (posSearchTerm.trim()) {
+        const q = posSearchTerm.toLowerCase();
+        const matchesName = m.name.toLowerCase().includes(q);
+        const matchesSku = m.sku.toLowerCase().includes(q);
+        const matchesLote = (m.loteProveedor || '').toLowerCase().includes(q);
+        if (!matchesName && !matchesSku && !matchesLote) return false;
+      }
+
+      return true;
+    });
+  }, [materials, catalogCategory, posSearchTerm]);
+
+  const showNotification = (type: 'success' | 'error', text: string) => {
+    setPosFeedback({ type, text });
+    setTimeout(() => setPosFeedback(null), 3500);
+  };
+
+  // Product CRUD Handlers in POS
+  const handleOpenCreateProduct = () => {
+    setEditingProduct(null);
+    setProdName('');
+    setProdSku(`PROD-${Math.floor(100 + Math.random() * 900)}`);
+    setProdStock(0);
+    setProdUnit('kg');
+    setProdMinStock(10);
+    setProdCost(0);
+    setProdSalePrice(0);
+    setProdLote('');
+    setProdExpiry('');
+    setProdActive(true);
+    setProdNotes('');
+    setShowProductModal(true);
+  };
+
+  const handleOpenEditProduct = (m: RawMaterial) => {
+    setEditingProduct(m);
+    setProdName(m.name);
+    setProdSku(m.sku);
+    setProdStock(m.stock);
+    setProdUnit(m.unit);
+    setProdMinStock(m.minStock);
+    setProdCost(m.costPerUnit);
+    setProdSalePrice(m.salePrice || 0);
+    setProdLote(m.loteProveedor || '');
+    setProdExpiry(m.expiryDate || '');
+    setProdActive(m.active ?? true);
+    setProdNotes(m.notes || '');
+    setShowProductModal(true);
+  };
+
+  const handleOpenViewProduct = (m: RawMaterial) => {
+    setViewingProduct(m);
+  };
+
+  const handleSaveProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!prodName.trim()) {
+      alert('El nombre del producto o materia prima es obligatorio');
+      return;
+    }
+
+    const newProd: RawMaterial = {
+      id: editingProduct ? editingProduct.id : `prod-${Date.now()}`,
+      name: prodName.trim(),
+      sku: prodSku.trim() || `SKU-${Date.now()}`,
+      stock: Number(prodStock) || 0,
+      unit: prodUnit,
+      minStock: Number(prodMinStock) || 0,
+      costPerUnit: Number(prodCost) || 0,
+      salePrice: Number(prodSalePrice) > 0 ? Number(prodSalePrice) : undefined,
+      loteProveedor: prodLote.trim() || undefined,
+      expiryDate: prodExpiry || undefined,
+      active: prodActive,
+      notes: prodNotes.trim() || undefined
+    };
+
+    const currentList = MockDatabase.getRawMaterials();
+    let updatedList: RawMaterial[];
+    if (editingProduct) {
+      updatedList = currentList.map(m => m.id === editingProduct.id ? newProd : m);
+    } else {
+      updatedList = [newProd, ...currentList];
+    }
+    MockDatabase.saveRawMaterials(updatedList);
+    setMaterials(updatedList);
+
+    MockDatabase.addAuditLog(
+      currentUser.name,
+      editingProduct ? 'Actualizó producto en mostrador' : 'Registró nuevo producto/materia prima en POS',
+      'Punto de Venta',
+      `${newProd.name} (${newProd.sku}) - Stock: ${newProd.stock} ${newProd.unit} - Estado: ${newProd.active ? 'Activo' : 'Desactivado'}`
+    );
+
+    setShowProductModal(false);
+    showNotification('success', `Producto/materia prima "${newProd.name}" guardado exitosamente.`);
+
+    try {
+      await saveRawMaterialToSupabase(newProd);
+    } catch (err) {
+      console.warn('Supabase save product error:', err);
+    }
+  };
+
+  const handleToggleProductActive = async (m: RawMaterial) => {
+    const nextStatus = !(m.active ?? true);
+    const updated: RawMaterial = { ...m, active: nextStatus };
+    const currentList = MockDatabase.getRawMaterials();
+    const updatedList = currentList.map(item => item.id === m.id ? updated : item);
+    MockDatabase.saveRawMaterials(updatedList);
+    setMaterials(updatedList);
+
+    MockDatabase.addAuditLog(
+      currentUser.name,
+      nextStatus ? 'Activó producto en POS' : 'Desactivó producto en POS',
+      'Punto de Venta',
+      `${m.name} (${m.sku}) ahora está ${nextStatus ? 'Activo' : 'Desactivado'}`
+    );
+
+    showNotification('success', `"${m.name}" ahora está ${nextStatus ? 'activo' : 'desactivado'}.`);
+
+    try {
+      await saveRawMaterialToSupabase(updated);
+    } catch (err) {
+      console.warn('Supabase toggle error:', err);
+    }
+  };
+
+  const handleDeleteProduct = async (id: string, name: string) => {
+    if (!confirm(`¿Estás seguro de eliminar el producto/materia prima "${name}" del inventario?`)) return;
+
+    const currentList = MockDatabase.getRawMaterials();
+    const updatedList = currentList.filter(m => m.id !== id);
+    MockDatabase.saveRawMaterials(updatedList);
+    setMaterials(updatedList);
+
+    MockDatabase.addAuditLog(
+      currentUser.name,
+      'Eliminó producto en POS',
+      'Punto de Venta',
+      `ID: ${id}, Nombre: ${name}`
+    );
+
+    showNotification('success', `"${name}" eliminado del catálogo.`);
+
+    try {
+      await deleteRawMaterialInSupabase(id);
+    } catch (err) {
+      console.warn('Supabase delete error:', err);
+    }
+  };
+
+  const handleOpenAdjust = (m: RawMaterial) => {
+    setAdjustingProduct(m);
+    setAdjustType('add');
+    setAdjustQty(0);
+    setAdjustReason('Ajuste de inventario en mostrador');
+    setShowAdjustModal(true);
+  };
+
+  const handleSaveAdjust = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adjustingProduct || adjustQty <= 0) {
+      alert('Ingresa una cantidad válida mayor a cero');
+      return;
+    }
+
+    let newStock = adjustingProduct.stock;
+    if (adjustType === 'add') {
+      newStock += adjustQty;
+    } else if (adjustType === 'remove') {
+      newStock = Math.max(0, newStock - adjustQty);
+    } else if (adjustType === 'set') {
+      newStock = adjustQty;
+    }
+
+    const updated: RawMaterial = {
+      ...adjustingProduct,
+      stock: Number(newStock.toFixed(2))
+    };
+
+    const currentList = MockDatabase.getRawMaterials();
+    const updatedList = currentList.map(m => m.id === adjustingProduct.id ? updated : m);
+    MockDatabase.saveRawMaterials(updatedList);
+    setMaterials(updatedList);
+
+    // Movimiento Kardex
+    const movements = MockDatabase.getStockMovements();
+    const newMovement = {
+      id: `mov-${Date.now()}`,
+      materialId: adjustingProduct.id,
+      type: adjustType === 'add' ? 'entrada_compra' : adjustType === 'remove' ? 'merma' : 'ajuste',
+      quantity: adjustQty,
+      date: new Date().toISOString(),
+      user: currentUser.name,
+      notes: `${adjustReason} (Stock: ${adjustingProduct.stock} ${adjustingProduct.unit} -> ${newStock} ${adjustingProduct.unit})`
+    };
+    MockDatabase.saveStockMovements([newMovement as any, ...movements]);
+
+    setShowAdjustModal(false);
+    showNotification('success', `Stock de "${adjustingProduct.name}" actualizado a ${newStock} ${adjustingProduct.unit}.`);
+
+    try {
+      await saveRawMaterialToSupabase(updated);
+    } catch (err) {
+      console.warn('Supabase adjust error:', err);
+    }
   };
 
   // Cálculos de Carrito Activo
@@ -158,21 +417,23 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
     : 0;
 
   // Acciones de Carrito
-  const addToCart = (prodId: string) => {
+  const addToCart = (prodId: string, customQty?: number) => {
+    const qtyToAdd = customQty !== undefined && customQty > 0 ? customQty : (productQuantities[prodId] || 1);
     const existing = cartItems.find(item => item.productMatId === prodId);
     if (existing) {
       setCartItems(cartItems.map(item => 
-        item.productMatId === prodId ? { ...item, quantity: item.quantity + 1 } : item
+        item.productMatId === prodId ? { ...item, quantity: Number((item.quantity + qtyToAdd).toFixed(2)) } : item
       ));
     } else {
-      setCartItems([...cartItems, { productMatId: prodId, quantity: 1 }]);
+      setCartItems([...cartItems, { productMatId: prodId, quantity: Number(qtyToAdd.toFixed(2)) }]);
     }
+    setProductQuantities(prev => ({ ...prev, [prodId]: 1 }));
   };
 
   const updateCartQty = (prodId: string, delta: number) => {
     setCartItems(cartItems.map(item => {
       if (item.productMatId === prodId) {
-        const newQty = item.quantity + delta;
+        const newQty = Number((item.quantity + delta).toFixed(2));
         return newQty > 0 ? { ...item, quantity: newQty } : item;
       }
       return item;
@@ -233,9 +494,9 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
       const unitPrice = getProductPriceForClient(item.productMatId, cartClientId);
       return {
         id: `item-${Date.now()}-${idx}`,
-        productName: mat.name,
+        productName: mat ? mat.name : 'Producto',
         quantity: item.quantity,
-        unit: 'pzs',
+        unit: (mat && mat.unit) ? mat.unit : 'pzs',
         unitPrice,
         total: unitPrice * item.quantity
       };
@@ -276,7 +537,7 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
     });
 
     if (!isQuote) {
-      // 1. Descontar Stock de Producto Terminado
+      // 1. Descontar Stock de Producto o Materia Prima vendida
       const currentMaterials = [...materials];
       const movements = MockDatabase.getStockMovements();
       const newMovements = [...movements];
@@ -284,7 +545,9 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
       cartItems.forEach(item => {
         const matIdx = currentMaterials.findIndex(m => m.id === item.productMatId);
         if (matIdx !== -1) {
-          currentMaterials[matIdx].stock = Math.max(0, currentMaterials[matIdx].stock - item.quantity);
+          const oldStock = currentMaterials[matIdx].stock;
+          const newStock = Math.max(0, Number((oldStock - item.quantity).toFixed(2)));
+          currentMaterials[matIdx].stock = newStock;
           
           newMovements.push({
             id: `mov-${Date.now()}-${item.productMatId}`,
@@ -293,14 +556,18 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
             quantity: item.quantity,
             date: new Date().toISOString(),
             user: currentUser.name,
-            notes: `Salida de almacén por venta folio ${newSale.id}`
+            notes: `Salida de mostrador por venta folio ${newSale.id} (${item.quantity} ${currentMaterials[matIdx].unit})`
           });
+
+          // Sincronizar actualización de stock en Supabase
+          saveRawMaterialToSupabase(currentMaterials[matIdx]).catch(e => console.warn('Supabase stock sync error:', e));
         }
       });
       MockDatabase.saveRawMaterials(currentMaterials);
       MockDatabase.saveStockMovements(newMovements);
+      setMaterials(currentMaterials);
 
-      // 2. Incrementar deuda del cliente si es crédito
+      // 2. Incrementar deuda del cliente si es crédito y registrar en Cuentas por Cobrar
       if (paymentType === 'Crédito') {
         const updatedClients = clients.map(c => {
           if (c.id === cartClientId) {
@@ -312,6 +579,28 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
           return c;
         });
         MockDatabase.saveClients(updatedClients);
+
+        // Crear registro formal en Cuentas por Cobrar
+        const currentCxc = MockDatabase.getAccountsReceivable();
+        const newCxc: AccountReceivable = {
+          id: `cxc-${Date.now()}`,
+          folio: `CXC-${Math.floor(1000 + Math.random() * 9000)}`,
+          clientId: cartClientId,
+          clientName: selectedClient?.name || 'Cliente Express',
+          saleId: newSale.id,
+          concept: `Venta a crédito en mostrador folio ${newSale.id}`,
+          issueDate: new Date().toISOString().split('T')[0],
+          dueDate: new Date(Date.now() + (selectedClient?.creditDays || 30) * 86400000).toISOString().split('T')[0],
+          creditDays: selectedClient?.creditDays || 30,
+          totalAmount: cartTotals.total,
+          amountPaid: 0,
+          remainingBalance: cartTotals.total,
+          status: 'pendiente',
+          createdAt: new Date().toISOString(),
+          active: true
+        };
+        MockDatabase.saveAccountsReceivable([newCxc, ...currentCxc]);
+        saveAccountReceivableToSupabase(newCxc).catch(e => console.warn('Supabase cxc sync error:', e));
       }
 
       // 3. Crear automáticamente Ruta de Entrega para el repartidor
@@ -719,18 +1008,117 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
         
         {/* TAB 1: POINT OF SALE */}
         {activeTab === 'pos' && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          <div className="space-y-4">
+            {/* Feedback Alert Banner */}
+            {posFeedback && (
+              <div className={`p-4 rounded-xl text-xs font-semibold flex items-center gap-2.5 transition-all shadow-xs ${
+                posFeedback.type === 'success' 
+                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' 
+                  : 'bg-rose-50 text-rose-800 border border-rose-200'
+              }`}>
+                {posFeedback.type === 'success' ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                ) : (
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                )}
+                <span>{posFeedback.text}</span>
+              </div>
+            )}
+
+            {/* Subview Switcher & Top Toolbar */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2 bg-slate-200/70 p-1 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setPosSubView('pos')}
+                  className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    posSubView === 'pos'
+                      ? 'bg-white text-purple-900 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <ShoppingCart className="w-3.5 h-3.5" />
+                  <span>Caja / Venta en Mostrador</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPosSubView('products')}
+                  className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    posSubView === 'products'
+                      ? 'bg-white text-purple-900 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Package className="w-3.5 h-3.5" />
+                  <span>Catálogo de Productos & Insumos ({materials.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPosSubView('history')}
+                  className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    posSubView === 'history'
+                      ? 'bg-white text-purple-900 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Receipt className="w-3.5 h-3.5" />
+                  <span>Historial de Ventas ({sales.length})</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleOpenCreateProduct}
+                  className="px-3.5 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>+ Registrar Producto / Materia Prima</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={loadDatabase}
+                  className="p-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-all shadow-xs cursor-pointer"
+                  title="Actualizar inventario"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {posSubView === 'history' ? (
+              <SalesOrdersManager currentUser={currentUser} onGoToPOS={() => setPosSubView('pos')} />
+            ) : posSubView === 'products' ? (
+              <AdminRawMaterialsManager currentUser={currentUser} />
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             
-            {/* Catalog of Finished Products */}
+            {/* Catalog of Products and Raw Materials */}
             <div className="lg:col-span-7 bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
-              <div>
-                <h3 className="text-base font-semibold text-slate-900">Catálogo de Producto Terminado</h3>
-                <p className="text-xs text-slate-500">Los precios se recalculan automáticamente según la tarifa asignada al cliente.</p>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-100 pb-3">
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <Package className="w-4 h-4 text-purple-700" />
+                    <span>Catálogo de Productos y Materias Primas</span>
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Venta directa por cantidad ({filteredCatalogProducts.length} artículos disponibles)
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleOpenCreateProduct}
+                  className="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 w-fit"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Registrar Artículo</span>
+                </button>
               </div>
 
               {/* Client Selector in POS */}
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Paso 1: Seleccionar Cliente</label>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Paso 1: Seleccionar Cliente y Tarifa de Venta</label>
                 <select
                   value={cartClientId}
                   onChange={(e) => setCartClientId(e.target.value)}
@@ -743,55 +1131,266 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
                   ))}
                 </select>
                 {selectedClient && (
-                  <div className="bg-purple-50 p-2 rounded border border-purple-100 mt-2 text-[11px] text-purple-900 flex justify-between items-center">
-                    <span>Tarifa Activa: <b>{selectedClient.priceList}</b> (Descuento aplicado en catálogo)</span>
+                  <div className="bg-purple-50 p-2.5 rounded-lg border border-purple-100 mt-2 text-[11px] text-purple-900 flex flex-wrap justify-between items-center gap-2">
+                    <span>Tarifa Aplicada: <b>{selectedClient.priceList}</b> ({selectedClient.priceList === 'Distribuidor' ? '20% desc.' : selectedClient.priceList === 'Mayoreo' ? '12% desc.' : 'Precio Mostrador'})</span>
                     {selectedClient.creditLimit > 0 && (
-                      <span>Crédito Disp: <b>${(selectedClient.creditLimit - selectedClient.currentDebt).toLocaleString()} MXN</b></span>
+                      <span>Crédito Disponible: <b>${Math.max(0, selectedClient.creditLimit - selectedClient.currentDebt).toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN</b> (Límite: ${selectedClient.creditLimit.toLocaleString('es-MX')})</span>
                     )}
                   </div>
                 )}
               </div>
 
-              {/* Products Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                {finishedProducts.map((prod) => {
-                  const clientPrice = getProductPriceForClient(prod.id, cartClientId);
-                  const isAgotado = prod.stock <= 0;
-
-                  return (
-                    <div 
-                      key={prod.id} 
-                      className={`p-4 border rounded-xl transition-all flex flex-col justify-between space-y-3 ${
-                        isAgotado ? 'opacity-60 border-slate-200' : 'hover:border-purple-300 border-slate-100 shadow-sm'
+              {/* Step 2: Search and Category Filter */}
+              <div className="space-y-2 pt-1">
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <div className="relative flex-1">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Buscar por código de producto interno (SKU), nombre o lote..."
+                      value={posSearchTerm}
+                      onChange={(e) => setPosSearchTerm(e.target.value)}
+                      className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 font-medium"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                    <button
+                      type="button"
+                      onClick={() => setCatalogCategory('all')}
+                      className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer shrink-0 ${
+                        catalogCategory === 'all'
+                          ? 'bg-slate-900 text-white'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                       }`}
                     >
-                      <div>
-                        <span className="text-[9px] font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">{prod.sku}</span>
-                        <h4 className="text-sm font-bold text-slate-900 mt-1">{prod.name}</h4>
-                        <div className="flex items-baseline space-x-2 mt-2">
-                          <span className="text-lg font-extrabold text-slate-950">${clientPrice.toFixed(2)} MXN</span>
-                          {cartClientId && selectedClient?.priceList !== 'Público' && (
-                            <span className="text-[10px] text-slate-400 line-through">${getBasePrices(prod.id)}</span>
-                          )}
+                      Todos ({materials.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCatalogCategory('finished')}
+                      className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer shrink-0 ${
+                        catalogCategory === 'finished'
+                          ? 'bg-purple-900 text-white'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      Terminados
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCatalogCategory('raw')}
+                      className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer shrink-0 ${
+                        catalogCategory === 'raw'
+                          ? 'bg-amber-900 text-white'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      Materias Primas
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCatalogCategory('in_stock')}
+                      className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer shrink-0 ${
+                        catalogCategory === 'in_stock'
+                          ? 'bg-emerald-900 text-white'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      En Stock
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Products Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-2">
+                {filteredCatalogProducts.length === 0 ? (
+                  <div className="col-span-2 text-center py-10 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                    <Package className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                    <p className="text-xs text-slate-500 font-semibold">No se encontraron artículos con los criterios seleccionados</p>
+                    <button
+                      type="button"
+                      onClick={handleOpenCreateProduct}
+                      className="mt-3 px-3 py-1.5 bg-purple-700 text-white rounded-lg text-xs font-bold hover:bg-purple-800 transition-colors inline-flex items-center gap-1.5"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Registrar Nuevo Producto
+                    </button>
+                  </div>
+                ) : (
+                  filteredCatalogProducts.map((prod) => {
+                    const clientPrice = getProductPriceForClient(prod.id, cartClientId);
+                    const basePrice = getBasePrices(prod.id);
+                    const isAgotado = prod.stock <= 0;
+                    const isLowStock = prod.stock > 0 && prod.stock <= prod.minStock;
+                    const isActive = prod.active ?? true;
+                    const currentQty = productQuantities[prod.id] ?? 1;
+
+                    return (
+                      <div 
+                        key={prod.id} 
+                        className={`p-3.5 border rounded-xl transition-all flex flex-col justify-between space-y-3 bg-white ${
+                          !isActive
+                            ? 'opacity-65 border-slate-200 bg-slate-50/50'
+                            : isAgotado 
+                              ? 'border-rose-200 bg-rose-50/10' 
+                              : isLowStock
+                                ? 'border-amber-200 bg-amber-50/10 hover:border-amber-300 shadow-xs'
+                                : 'hover:border-purple-300 border-slate-200 shadow-xs'
+                        }`}
+                      >
+                        <div>
+                          {/* Card Top: Sku Code, Active Status, and Action Buttons */}
+                          <div className="flex items-start justify-between gap-1 mb-1.5">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200">
+                                Cód: {prod.sku}
+                              </span>
+                              <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-full border ${
+                                isActive 
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                                  : 'bg-slate-200 text-slate-600 border-slate-300'
+                              }`}>
+                                {isActive ? 'Activo' : 'Desactivado'}
+                              </span>
+                            </div>
+
+                            {/* Row Action Buttons: Ver, Editar, Ajustar Stock, Desactivar, Borrar */}
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenViewProduct(prod)}
+                                className="p-1 hover:bg-slate-100 text-slate-500 hover:text-slate-800 rounded transition-colors"
+                                title="Ver Ficha Técnica"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditProduct(prod)}
+                                className="p-1 hover:bg-slate-100 text-slate-500 hover:text-amber-700 rounded transition-colors"
+                                title="Editar Producto / Materia Prima"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenAdjust(prod)}
+                                className="p-1 hover:bg-slate-100 text-slate-500 hover:text-purple-700 rounded transition-colors"
+                                title="Ajustar Stock"
+                              >
+                                <Sliders className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleToggleProductActive(prod)}
+                                className={`p-1 hover:bg-slate-100 rounded transition-colors ${
+                                  isActive ? 'text-emerald-600 hover:text-emerald-700' : 'text-slate-400 hover:text-slate-600'
+                                }`}
+                                title={isActive ? 'Desactivar producto' : 'Activar producto'}
+                              >
+                                {isActive ? <ToggleRight className="w-3.5 h-3.5" /> : <ToggleLeft className="w-3.5 h-3.5" />}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteProduct(prod.id, prod.name)}
+                                className="p-1 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded transition-colors"
+                                title="Eliminar Producto"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Product Name */}
+                          <h4 className="text-xs font-bold text-slate-900 leading-snug line-clamp-2" title={prod.name}>
+                            {prod.name}
+                          </h4>
+
+                          {/* Pricing */}
+                          <div className="flex items-baseline space-x-2 mt-1.5">
+                            <span className="text-base font-black text-slate-950">
+                              ${clientPrice.toFixed(2)} MXN
+                            </span>
+                            <span className="text-[10px] text-slate-400">/ {prod.unit}</span>
+                            {cartClientId && selectedClient?.priceList !== 'Público' && clientPrice < basePrice && (
+                              <span className="text-[10px] text-slate-400 line-through">
+                                ${basePrice.toFixed(2)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Stock Status & Quantity Add Bar */}
+                        <div className="pt-2 border-t border-slate-100 space-y-2">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className={`font-bold flex items-center gap-1 ${
+                              isAgotado 
+                                ? 'text-rose-600' 
+                                : isLowStock 
+                                  ? 'text-amber-600' 
+                                  : 'text-emerald-700'
+                            }`}>
+                              {isAgotado ? (
+                                <>
+                                  <AlertTriangle className="w-3 h-3 text-rose-500" />
+                                  <span>AGOTADO</span>
+                                </>
+                              ) : isLowStock ? (
+                                <>
+                                  <AlertTriangle className="w-3 h-3 text-amber-500" />
+                                  <span>Bajo Stock: {prod.stock} {prod.unit}</span>
+                                </>
+                              ) : (
+                                <span>Stock: {prod.stock} {prod.unit}</span>
+                              )}
+                            </span>
+
+                            {prod.loteProveedor && (
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                Lote: {prod.loteProveedor}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Quantity Selector & Add Button */}
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center border border-slate-200 rounded-lg bg-slate-50 overflow-hidden w-24 shrink-0">
+                              <input
+                                type="number"
+                                min={prod.unit === 'pzs' ? 1 : 0.1}
+                                step={prod.unit === 'pzs' ? 1 : 0.5}
+                                value={currentQty}
+                                onChange={(e) => {
+                                  const val = parseFloat(e.target.value);
+                                  setProductQuantities(prev => ({
+                                    ...prev,
+                                    [prod.id]: isNaN(val) ? 1 : Math.max(0.1, val)
+                                  }));
+                                }}
+                                className="w-full text-center text-xs font-bold py-1 bg-transparent focus:outline-none"
+                                title={`Cantidad a vender en ${prod.unit}`}
+                              />
+                              <span className="text-[9px] font-bold text-slate-400 pr-1.5 uppercase select-none">
+                                {prod.unit}
+                              </span>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => addToCart(prod.id, currentQty)}
+                              className="flex-1 bg-slate-900 hover:bg-purple-900 text-white text-[11px] font-bold py-1.5 px-2 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1 cursor-pointer"
+                              disabled={!cartClientId || isAgotado || !isActive}
+                            >
+                              <Plus className="w-3 h-3" />
+                              <span>Añadir</span>
+                            </button>
+                          </div>
                         </div>
                       </div>
-
-                      <div className="flex items-center justify-between pt-2 border-t border-slate-50">
-                        <span className={`text-[10px] font-bold ${isAgotado ? 'text-red-500' : 'text-slate-500'}`}>
-                          {isAgotado ? 'AGOTADO' : `Disponible: ${prod.stock} pzs`}
-                        </span>
-                        
-                        <button
-                          onClick={() => addToCart(prod.id)}
-                          className="bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold px-3 py-1.5 rounded transition-all disabled:opacity-50"
-                          disabled={!cartClientId || isAgotado}
-                        >
-                          Añadir
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </div>
             </div>
 
@@ -924,259 +1523,20 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
             </div>
 
           </div>
+            )}
+          </div>
         )}
 
-        {/* TAB 2: CRM & QUOTES */}
+        {/* TAB 2: CLIENTES Y PROSPECTOS (CRM) */}
         {activeTab === 'crm' && (
-          <div className="space-y-6">
-            
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              
-              {/* Form Registro de Cliente */}
-              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm lg:col-span-1 h-fit">
-                <h3 className="text-base font-semibold text-slate-900 mb-4 flex items-center">
-                  <Plus className="w-5 h-5 mr-1 text-purple-600" /> Registrar Nuevo Prospecto (CRM)
-                </h3>
-
-                <form onSubmit={handleCreateClient} className="space-y-3.5 text-xs">
-                  <div>
-                    <label className="block font-semibold text-slate-600 mb-1">Razón Social / Cliente</label>
-                    <input
-                      type="text"
-                      placeholder="Ej. Químicos de México S.A."
-                      value={crmClientName}
-                      onChange={(e) => setCrmClientName(e.target.value)}
-                      className="w-full text-sm bg-white border border-slate-200 rounded-lg p-2.5"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-semibold text-slate-600 mb-1">RFC Oficial</label>
-                    <input
-                      type="text"
-                      placeholder="Ej. QME120409BA1"
-                      value={crmClientRFC}
-                      onChange={(e) => setCrmClientRFC(e.target.value.toUpperCase())}
-                      className="w-full text-sm bg-white border border-slate-200 rounded-lg p-2.5 font-mono"
-                      maxLength={13}
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-semibold text-slate-600 mb-1">Correo Electrónico (Para CFDI)</label>
-                    <input
-                      type="email"
-                      placeholder="Ej. facturacion@cliente.com"
-                      value={crmClientEmail}
-                      onChange={(e) => setCrmClientEmail(e.target.value)}
-                      className="w-full text-sm bg-white border border-slate-200 rounded-lg p-2.5"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-semibold text-slate-600 mb-1">Lista de Precios Permitida</label>
-                    <select
-                      value={crmClientPriceList}
-                      onChange={(e) => setCrmClientPriceList(e.target.value as any)}
-                      className="w-full text-sm bg-white border border-slate-200 rounded-lg p-2.5"
-                    >
-                      <option value="Público">Público General (Sin descuento)</option>
-                      <option value="Mayoreo">Tarifa Mayoreo (12% Descuento)</option>
-                      <option value="Distribuidor">Tarifa Distribuidor (20% Descuento)</option>
-                    </select>
-                  </div>
-
-                  <button type="submit" className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 rounded-lg text-xs">
-                    Registrar Cliente en CRM
-                  </button>
-                </form>
-              </div>
-
-              {/* Lista de Cotizaciones Activas */}
-              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm lg:col-span-2">
-                <h3 className="text-base font-semibold text-slate-900 mb-4 flex items-center">
-                  <FileCheck className="w-5 h-5 mr-1.5 text-slate-500" /> Cotizaciones CRM Pendientes de Conversión
-                </h3>
-
-                <div className="space-y-4">
-                  {sales.filter(s => s.status === 'Cotización').length === 0 ? (
-                    <p className="text-slate-400 text-xs italic py-6 text-center">No hay cotizaciones pendientes en el CRM.</p>
-                  ) : (
-                    sales.filter(s => s.status === 'Cotización').map(cot => (
-                      <div key={cot.id} className="p-4 bg-slate-50 border border-slate-100 rounded-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-                        <div>
-                          <div className="flex items-center space-x-2">
-                            <span className="bg-amber-100 text-amber-800 font-mono text-[9px] font-bold px-1.5 py-0.2 rounded">{cot.id}</span>
-                            <span className="text-[10px] text-slate-500 font-mono">{new Date(cot.createdAt).toLocaleDateString('es-MX')}</span>
-                          </div>
-                          <h4 className="text-sm font-bold text-slate-950 mt-1">{cot.clientName}</h4>
-                          <p className="text-xs text-slate-600 mt-1">Surtido: {cot.items.map(it => `${it.quantity} pzs de ${it.productName.split('-')[0]}`).join(', ')}</p>
-                        </div>
-
-                        <div className="text-right flex items-center space-x-3 w-full md:w-auto justify-between md:justify-end">
-                          <div>
-                            <p className="text-sm font-extrabold text-slate-900">${cot.total.toLocaleString()} MXN</p>
-                            <p className="text-[9px] text-slate-400 uppercase">Tarifa asignada</p>
-                          </div>
-                          
-                          <button
-                            onClick={() => handleConvertQuote(cot.id)}
-                            className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-[11px] px-3.5 py-2 rounded-lg transition-all"
-                          >
-                            Convertir a Pedido Surtido
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-            </div>
-
-          </div>
+          <ClientsManager currentUser={currentUser} />
         )}
 
-        {/* TAB 3: COBRANZA (CREDITS) */}
+        {/* TAB 3: CUENTAS POR COBRAR (COBRANZA Y CRÉDITOS) */}
         {activeTab === 'cobranza' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
-            {/* Form para Registrar Abono */}
-            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm lg:col-span-1 h-fit">
-              <h3 className="text-base font-semibold text-slate-900 mb-4 flex items-center">
-                <DollarSign className="w-5 h-5 mr-1 text-emerald-600" /> Registrar Abono / Pago de Cliente
-              </h3>
-
-              <form onSubmit={handleRegisterAbono} className="space-y-4 text-xs">
-                <div>
-                  <label className="block font-semibold text-slate-600 mb-1">Seleccionar Cliente Deudor</label>
-                  <select
-                    value={selectedCobranzaClientId}
-                    onChange={(e) => {
-                      const cliId = e.target.value;
-                      setSelectedCobranzaClientId(cliId);
-                      const chosen = clients.find(c => c.id === cliId);
-                      if (chosen) setPaymentAmount(chosen.currentDebt);
-                    }}
-                    className="w-full text-sm bg-white border border-slate-200 rounded-lg p-2.5 focus:ring-2 focus:ring-emerald-500"
-                    required
-                  >
-                    <option value="">-- Elige el deudor --</option>
-                    {clients.filter(c => c.currentDebt > 0).map(c => (
-                      <option key={c.id} value={c.id}>{c.name} (Debe: ${c.currentDebt.toLocaleString()})</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-600 mb-1">Monto del Abono ($ MXN)</label>
-                  <input
-                    type="number"
-                    value={paymentAmount}
-                    onChange={(e) => setPaymentAmount(Number(e.target.value))}
-                    className="w-full text-sm bg-white border border-slate-200 rounded-lg p-2.5 focus:ring-2 focus:ring-emerald-500"
-                    min="1"
-                    disabled={!selectedCobranzaClientId}
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-600 mb-1">Folio de Transferencia o Recibo</label>
-                  <input
-                    type="text"
-                    placeholder="Ej. SPEI Bancomer #1928"
-                    value={paymentNotes}
-                    onChange={(e) => setPaymentNotes(e.target.value)}
-                    className="w-full text-sm bg-white border border-slate-200 rounded-lg p-2.5"
-                    disabled={!selectedCobranzaClientId}
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 rounded-lg text-xs"
-                  disabled={!selectedCobranzaClientId}
-                >
-                  Registrar Ingreso a Caja
-                </button>
-              </form>
-            </div>
-
-            {/* List of Debtors with credit limits */}
-            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm lg:col-span-2">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
-                <h3 className="text-base font-semibold text-slate-900 flex items-center">
-                  <Landmark className="w-5 h-5 mr-1.5 text-slate-500" /> Cuentas por Cobrar de Clientes
-                </h3>
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => exportToExcel(clients.filter(c => c.creditLimit > 0).map(c => ({ Cliente: c.name, 'Crédito Autorizado': c.creditLimit, 'Saldo Pendiente': c.currentDebt, 'Disponible Restante': c.creditLimit - c.currentDebt })), 'Cobranza_Cuentas_Por_Cobrar')}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-all"
-                  >
-                    <Download className="w-3.5 h-3.5" /> Excel
-                  </button>
-                  <button
-                    onClick={() => exportToPDF('Estado de Cuentas por Cobrar de Clientes', ['Cliente Deudor', 'Crédito Autorizado ($)', 'Saldo Pendiente ($)', 'Disponible Restante ($)'], clients.filter(c => c.creditLimit > 0).map(c => [c.name, `$${c.creditLimit.toLocaleString('es-MX')}`, `$${c.currentDebt.toLocaleString('es-MX')}`, `$${(c.creditLimit - c.currentDebt).toLocaleString('es-MX')}`]))}
-                    className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-all"
-                  >
-                    <Printer className="w-3.5 h-3.5" /> PDF
-                  </button>
-                </div>
-              </div>
-
-              <div className="border border-slate-100 rounded-lg overflow-hidden">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
-                      <th className="p-3">Cliente Deudor</th>
-                      <th className="p-3">Crédito Autorizado</th>
-                      <th className="p-3">Saldo Vencido / Deuda</th>
-                      <th className="p-3">Disponible Restante</th>
-                      <th className="p-3">Estatus Riesgo</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {clients.map(c => {
-                      if (c.creditLimit <= 0) return null;
-                      
-                      const percentDebt = (c.currentDebt / c.creditLimit) * 100;
-                      let riskBadge = 'bg-green-50 text-green-700';
-                      let riskLabel = 'Estable';
-
-                      if (percentDebt >= 90) {
-                        riskBadge = 'bg-red-50 text-red-700 border border-red-200 animate-pulse';
-                        riskLabel = 'Peligro Límite';
-                      } else if (percentDebt >= 50) {
-                        riskBadge = 'bg-yellow-50 text-yellow-700';
-                        riskLabel = 'Preventivo';
-                      }
-
-                      return (
-                        <tr key={c.id} className="hover:bg-slate-50">
-                          <td className="p-3 font-semibold text-slate-900">{c.name}</td>
-                          <td className="p-3">${c.creditLimit.toLocaleString()} MXN</td>
-                          <td className="p-3 font-bold text-slate-950">${c.currentDebt.toLocaleString()} MXN</td>
-                          <td className="p-3 text-slate-600 font-medium">
-                            ${(c.creditLimit - c.currentDebt).toLocaleString()} MXN
-                          </td>
-                          <td className="p-3">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${riskBadge}`}>
-                              {riskLabel}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-          </div>
+          <AccountsReceivableManager currentUser={currentUser} />
         )}
+
 
         {/* TAB 4: TRASLADO DE PRODUCTOS */}
         {activeTab === 'traslado' && (
@@ -1977,6 +2337,449 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
               </div>
 
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 1: REGISTRAR / EDITAR PRODUCTO O MATERIA PRIMA */}
+      {showProductModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl max-h-[92vh] flex flex-col overflow-hidden">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-purple-50/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-purple-700 text-white flex items-center justify-center shadow-md shadow-purple-700/20 font-bold">
+                  <Package className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">
+                    {editingProduct ? 'Editar Producto / Materia Prima' : 'Registrar Nuevo Producto / Materia Prima'}
+                  </h2>
+                  <p className="text-xs text-slate-500">Parámetros de inventario por cantidad, código interno y precios</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setShowProductModal(false)}
+                className="p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveProduct} className="p-6 overflow-y-auto space-y-4 flex-1 text-slate-700 text-xs">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                
+                {/* Nombre */}
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Nombre del Producto o Materia Prima *</label>
+                  <input 
+                    type="text"
+                    required
+                    value={prodName}
+                    onChange={(e) => setProdName(e.target.value)}
+                    placeholder="Ej. Sosa Cáustica Líquida 50%, Harina de Trigo, etc."
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600 font-medium text-slate-800"
+                  />
+                </div>
+
+                {/* Estatus Activo / Desactivado Toggle */}
+                <div className="md:col-span-2 flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <div>
+                    <p className="text-xs font-bold text-slate-800">Estatus para Venta en Mostrador</p>
+                    <p className="text-[11px] text-slate-500">Los productos desactivados no se podrán seleccionar en caja</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setProdActive(!prodActive)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                      prodActive ? 'bg-emerald-600 text-white' : 'bg-slate-300 text-slate-700'
+                    }`}
+                  >
+                    {prodActive ? (
+                      <>
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>Producto Activo</span>
+                      </>
+                    ) : (
+                      <>
+                        <X className="w-3.5 h-3.5" />
+                        <span>Desactivado</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Código Interno / SKU */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Código de Producto Interno (SKU) *</label>
+                  <input 
+                    type="text"
+                    required
+                    value={prodSku}
+                    onChange={(e) => setProdSku(e.target.value)}
+                    placeholder="PROD-101 o MP-202"
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600"
+                  />
+                </div>
+
+                {/* Unidad de Medida */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Unidad de Medida *</label>
+                  <select
+                    value={prodUnit}
+                    onChange={(e) => setProdUnit(e.target.value as any)}
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600"
+                  >
+                    <option value="kg">Kilogramos (kg)</option>
+                    <option value="L">Litros (L)</option>
+                    <option value="pzs">Piezas (pzs)</option>
+                  </select>
+                </div>
+
+                {/* Cantidad / Stock Actual */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Cantidad / Stock Actual en Almacén *</label>
+                  <input 
+                    type="number"
+                    min={0}
+                    step="any"
+                    required
+                    value={prodStock}
+                    onChange={(e) => setProdStock(Number(e.target.value))}
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600"
+                  />
+                </div>
+
+                {/* Stock Mínimo */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Stock Mínimo de Alerta</label>
+                  <input 
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={prodMinStock}
+                    onChange={(e) => setProdMinStock(Number(e.target.value))}
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-amber-700 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600"
+                  />
+                </div>
+
+                {/* Costo Unitario */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Costo Unitario ($ MXN)</label>
+                  <input 
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={prodCost}
+                    onChange={(e) => setProdCost(Number(e.target.value))}
+                    placeholder="0.00"
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600"
+                  />
+                </div>
+
+                {/* Precio de Venta al Público / Mostrador */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Precio de Venta Base ($ MXN)</label>
+                  <input 
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={prodSalePrice}
+                    onChange={(e) => setProdSalePrice(Number(e.target.value))}
+                    placeholder="0.00"
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-emerald-700 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600"
+                  />
+                </div>
+
+                {/* Lote Proveedor / Interno */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Lote de Proveedor o Interno</label>
+                  <input 
+                    type="text"
+                    value={prodLote}
+                    onChange={(e) => setProdLote(e.target.value)}
+                    placeholder="Ej. LOT-2026-X1"
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600"
+                  />
+                </div>
+
+                {/* Fecha Caducidad */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Fecha de Caducidad</label>
+                  <input 
+                    type="date"
+                    value={prodExpiry}
+                    onChange={(e) => setProdExpiry(e.target.value)}
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600"
+                  />
+                </div>
+
+                {/* Notas */}
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Notas u Observaciones</label>
+                  <textarea 
+                    rows={2}
+                    value={prodNotes}
+                    onChange={(e) => setProdNotes(e.target.value)}
+                    placeholder="Detalles sobre presentación, condiciones de almacenamiento, etc."
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600"
+                  />
+                </div>
+
+              </div>
+
+              <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowProductModal(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl font-bold transition-all shadow-md shadow-purple-700/20 flex items-center gap-2 cursor-pointer"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>{editingProduct ? 'Guardar Cambios' : 'Registrar en Inventario y Supabase'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: VER FICHA DE PRODUCTO / MATERIA PRIMA */}
+      {viewingProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-purple-700 text-white flex items-center justify-center font-bold">
+                  <Package className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-800">{viewingProduct.name}</h3>
+                  <p className="text-xs text-slate-500 font-mono">Código Interno / SKU: {viewingProduct.sku}</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setViewingProduct(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                <div>
+                  <p className="text-slate-400 font-medium">Stock Disponible</p>
+                  <p className="text-base font-bold text-slate-900 font-mono">{viewingProduct.stock} {viewingProduct.unit}</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 font-medium">Stock Mínimo Alerta</p>
+                  <p className="font-semibold text-slate-700 font-mono">{viewingProduct.minStock} {viewingProduct.unit}</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 font-medium">Costo por {viewingProduct.unit}</p>
+                  <p className="font-bold text-slate-700 font-mono">${viewingProduct.costPerUnit.toFixed(2)} MXN</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 font-medium">Precio de Venta Base</p>
+                  <p className="font-bold text-emerald-700 font-mono text-sm">
+                    {viewingProduct.salePrice ? `$${viewingProduct.salePrice.toFixed(2)} MXN` : 'Sin precio asignado'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-slate-400 font-medium">Valor Total en Stock</p>
+                  <p className="font-bold text-slate-800 font-mono">
+                    ${(viewingProduct.stock * viewingProduct.costPerUnit).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MXN
+                  </p>
+                </div>
+                <div>
+                  <p className="text-slate-400 font-medium">Lote</p>
+                  <p className="font-semibold font-mono text-slate-800">{viewingProduct.loteProveedor || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 font-medium">Fecha Caducidad</p>
+                  <p className="font-semibold text-slate-800">{viewingProduct.expiryDate || 'No especificada'}</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 font-medium">Estatus Mostrador</p>
+                  <span className={`inline-block px-2 py-0.5 rounded-full font-bold text-[10px] border mt-0.5 ${
+                    (viewingProduct.active ?? true) ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-200 text-slate-600 border-slate-300'
+                  }`}>
+                    {(viewingProduct.active ?? true) ? '✓ Activo' : '✕ Desactivado'}
+                  </span>
+                </div>
+              </div>
+
+              {viewingProduct.notes && (
+                <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-amber-800">
+                  <span className="font-bold block mb-0.5">Notas y Especificaciones:</span>
+                  <p>{viewingProduct.notes}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const p = viewingProduct;
+                    setViewingProduct(null);
+                    handleOpenEditProduct(p);
+                  }}
+                  className="px-3 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl font-bold flex items-center gap-1.5 transition-colors text-xs cursor-pointer"
+                >
+                  <Edit className="w-3.5 h-3.5" />
+                  <span>Editar este Artículo</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const p = viewingProduct;
+                    setViewingProduct(null);
+                    handleOpenAdjust(p);
+                  }}
+                  className="px-3 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl font-bold flex items-center gap-1.5 transition-colors text-xs cursor-pointer"
+                >
+                  <Sliders className="w-3.5 h-3.5" />
+                  <span>Ajustar Stock</span>
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingProduct(null)}
+                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl font-semibold transition-colors text-xs cursor-pointer"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 3: AJUSTAR STOCK RÁPIDO */}
+      {showAdjustModal && adjustingProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden flex flex-col">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-purple-50/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-purple-700 text-white flex items-center justify-center font-bold">
+                  <Sliders className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Ajustar Inventario en Mostrador</h3>
+                  <p className="text-xs text-slate-500 font-mono">{adjustingProduct.name} ({adjustingProduct.sku})</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setShowAdjustModal(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveAdjust} className="p-6 space-y-4 text-xs text-slate-700">
+              <div className="p-3 bg-purple-50/80 rounded-xl border border-purple-100 flex justify-between items-center">
+                <span className="font-semibold text-purple-900">Stock Actual en Sistema:</span>
+                <span className="text-base font-black text-purple-950 font-mono">
+                  {adjustingProduct.stock} {adjustingProduct.unit}
+                </span>
+              </div>
+
+              {/* Tipo de Ajuste */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Tipo de Movimiento</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAdjustType('add')}
+                    className={`py-2 px-2 rounded-xl font-bold border transition-all text-center cursor-pointer ${
+                      adjustType === 'add'
+                        ? 'bg-emerald-600 text-white border-emerald-600'
+                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    + Entrada / Compra
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAdjustType('remove')}
+                    className={`py-2 px-2 rounded-xl font-bold border transition-all text-center cursor-pointer ${
+                      adjustType === 'remove'
+                        ? 'bg-rose-600 text-white border-rose-600'
+                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    - Salida / Merma
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAdjustType('set')}
+                    className={`py-2 px-2 rounded-xl font-bold border transition-all text-center cursor-pointer ${
+                      adjustType === 'set'
+                        ? 'bg-purple-700 text-white border-purple-700'
+                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    = Fijar Físico
+                  </button>
+                </div>
+              </div>
+
+              {/* Cantidad a ajustar */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  {adjustType === 'set' ? 'Nuevo Stock Total Exacto' : 'Cantidad a Ajustar'} ({adjustingProduct.unit}) *
+                </label>
+                <input 
+                  type="number"
+                  min={0.01}
+                  step="any"
+                  required
+                  value={adjustQty}
+                  onChange={(e) => setAdjustQty(Number(e.target.value))}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600"
+                />
+              </div>
+
+              {/* Motivo */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Motivo / Justificación *</label>
+                <input 
+                  type="text"
+                  required
+                  value={adjustReason}
+                  onChange={(e) => setAdjustReason(e.target.value)}
+                  placeholder="Ej. Conteo físico de inventario, recepción de lote, merma por derrame"
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-600"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowAdjustModal(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl font-bold transition-all shadow-md shadow-purple-700/20 flex items-center gap-2 cursor-pointer"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Aplicar Ajuste y Kardex</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

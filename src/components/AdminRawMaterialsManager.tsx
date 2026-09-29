@@ -39,10 +39,12 @@ export const AdminRawMaterialsManager: React.FC<AdminRawMaterialsManagerProps> =
   const [unit, setUnit] = useState<'kg' | 'L' | 'pzs'>('kg');
   const [minStock, setMinStock] = useState<number>(10);
   const [costPerUnit, setCostPerUnit] = useState<number>(0);
+  const [salePrice, setSalePrice] = useState<number>(0);
   const [loteProveedor, setLoteProveedor] = useState('');
   const [expiryDate, setExpiryDate] = useState('');
   const [notes, setNotes] = useState('');
   const [active, setActive] = useState(true);
+
 
   // Quick Adjustment Modal State
   const [showAdjustModal, setShowAdjustModal] = useState(false);
@@ -99,11 +101,12 @@ export const AdminRawMaterialsManager: React.FC<AdminRawMaterialsManagerProps> =
   const handleOpenCreate = () => {
     setEditingMaterial(null);
     setName('');
-    setSku(`MP-${Math.floor(100 + Math.random() * 900)}`);
+    setSku(`PROD-${Math.floor(100 + Math.random() * 900)}`);
     setStock(0);
     setUnit('kg');
     setMinStock(10);
     setCostPerUnit(0);
+    setSalePrice(0);
     setLoteProveedor('');
     setExpiryDate('');
     setNotes('');
@@ -119,6 +122,7 @@ export const AdminRawMaterialsManager: React.FC<AdminRawMaterialsManagerProps> =
     setUnit(m.unit);
     setMinStock(m.minStock);
     setCostPerUnit(m.costPerUnit);
+    setSalePrice(m.salePrice || 0);
     setLoteProveedor(m.loteProveedor || '');
     setExpiryDate(m.expiryDate || '');
     setNotes(m.notes || '');
@@ -170,6 +174,7 @@ export const AdminRawMaterialsManager: React.FC<AdminRawMaterialsManagerProps> =
       unit,
       minStock: Number(minStock) || 0,
       costPerUnit: Number(costPerUnit) || 0,
+      salePrice: Number(salePrice) > 0 ? Number(salePrice) : undefined,
       loteProveedor: loteProveedor.trim() || undefined,
       expiryDate: expiryDate || undefined,
       notes: notes.trim() || undefined,
@@ -703,11 +708,17 @@ export const AdminRawMaterialsManager: React.FC<AdminRawMaterialsManagerProps> =
                 </div>
                 <div>
                   <p className="text-slate-400 font-medium">Costo por {viewingMaterial.unit}</p>
-                  <p className="font-bold text-emerald-700 text-sm font-mono">${viewingMaterial.costPerUnit.toFixed(2)} MXN</p>
+                  <p className="font-bold text-slate-700 text-sm font-mono">${viewingMaterial.costPerUnit.toFixed(2)} MXN</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 font-medium">Precio Venta Mostrador</p>
+                  <p className="font-bold text-emerald-700 text-sm font-mono">
+                    {viewingMaterial.salePrice ? `$${viewingMaterial.salePrice.toFixed(2)} MXN` : 'Sin precio asignado'}
+                  </p>
                 </div>
                 <div>
                   <p className="text-slate-400 font-medium">Valor Total en Stock</p>
-                  <p className="font-bold text-emerald-700 text-sm font-mono">${(viewingMaterial.stock * viewingMaterial.costPerUnit).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MXN</p>
+                  <p className="font-bold text-slate-800 text-sm font-mono">${(viewingMaterial.stock * viewingMaterial.costPerUnit).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MXN</p>
                 </div>
                 <div>
                   <p className="text-slate-400 font-medium">Lote Proveedor</p>
@@ -880,6 +891,20 @@ export const AdminRawMaterialsManager: React.FC<AdminRawMaterialsManagerProps> =
                     value={costPerUnit}
                     onChange={(e) => setCostPerUnit(Number(e.target.value))}
                     placeholder="0.00"
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                  />
+                </div>
+
+                {/* Precio de Venta al Público / POS */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Precio de Venta Base ($ MXN)</label>
+                  <input 
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={salePrice}
+                    onChange={(e) => setSalePrice(Number(e.target.value))}
+                    placeholder="0.00 (Opcional para venta directa)"
                     className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-emerald-700 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
                   />
                 </div>

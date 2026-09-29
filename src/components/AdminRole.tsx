@@ -16,8 +16,11 @@ import { ClientsManager } from './ClientsManager';
 import { AdminRawMaterialsManager } from './AdminRawMaterialsManager';
 import { SaleNotesManager } from './SaleNotesManager';
 import { TransferSheetsManager } from './TransferSheetsManager';
+import { AccountsReceivableManager } from './AccountsReceivableManager';
+import { SalesOrdersManager } from './SalesOrdersManager';
 
-export type AdminTabType = 'analytics' | 'finances' | 'clients' | 'notas' | 'traslado' | 'suppliers' | 'raw_materials' | 'employees' | 'config';
+export type AdminTabType = 'analytics' | 'finances' | 'cobranza' | 'sales_orders' | 'clients' | 'notas' | 'traslado' | 'suppliers' | 'raw_materials' | 'employees' | 'config';
+
 
 interface AdminRoleProps {
   onBack: () => void;
@@ -1115,10 +1118,21 @@ export default function AdminRole({ onBack, currentUser, activeTab: propsActiveT
           </div>
         )}
 
-        {/* TAB: CLIENTES */}
+        {/* TAB: CUENTAS POR COBRAR */}
+        {activeTab === 'cobranza' && (
+          <AccountsReceivableManager currentUser={currentUser} />
+        )}
+
+        {/* TAB: HISTORIAL DE VENTAS Y PEDIDOS */}
+        {activeTab === 'sales_orders' && (
+          <SalesOrdersManager currentUser={currentUser} />
+        )}
+
+        {/* TAB: CLIENTES Y PROSPECTOS */}
         {activeTab === 'clients' && (
           <ClientsManager currentUser={currentUser} />
         )}
+
 
         {/* TAB: NOTAS DE VENTA */}
         {activeTab === 'notas' && (

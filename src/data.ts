@@ -1,4 +1,4 @@
-import { RawMaterial, Formula, ProductionOrder, StockMovement, Client, Sale, DeliveryRoute, AuditLog, User, SystemConfig, PurchaseOrder, TransferSheet, SaleNote, Supplier } from './types';
+import { RawMaterial, Formula, ProductionOrder, StockMovement, Client, Sale, DeliveryRoute, AuditLog, User, SystemConfig, PurchaseOrder, TransferSheet, SaleNote, Supplier, AccountReceivable, ReceivablePayment } from './types';
 
 export const INITIAL_USERS: User[] = [
   { 
@@ -468,6 +468,94 @@ export const INITIAL_SALE_NOTES: SaleNote[] = [
   }
 ];
 
+export const INITIAL_RECEIVABLE_PAYMENTS: ReceivablePayment[] = [
+  {
+    id: 'pay-1',
+    receivableId: 'cxc-1',
+    clientId: 'cli-1',
+    date: '2026-07-15',
+    amount: 5000,
+    paymentMethod: 'Transferencia SPEI',
+    reference: 'SPEI-BBVA-90812',
+    receivedBy: 'Jonathan (Gerente)',
+    notes: 'Abono inicial a cuenta de factura 4A8B',
+    createdAt: '2026-07-15T12:00:00Z'
+  }
+];
+
+export const INITIAL_ACCOUNTS_RECEIVABLE: AccountReceivable[] = [
+  {
+    id: 'cxc-1',
+    folio: 'CXC-00101',
+    clientId: 'cli-1',
+    clientName: 'Pastelería "El Maná del Cielo"',
+    saleId: 'vta-1',
+    concept: 'Venta a crédito de Insumos y Envases Pastelería (Factura CFDI 4A8B-91F2)',
+    issueDate: '2026-07-07',
+    dueDate: '2026-08-06',
+    creditDays: 30,
+    totalAmount: 20000,
+    amountPaid: 5000,
+    remainingBalance: 15000,
+    status: 'parcial',
+    notes: 'Abono parcial recibido de $5,000 vía SPEI. Saldo restante de $15,000 en curso.',
+    payments: [
+      {
+        id: 'pay-1',
+        receivableId: 'cxc-1',
+        clientId: 'cli-1',
+        date: '2026-07-15',
+        amount: 5000,
+        paymentMethod: 'Transferencia SPEI',
+        reference: 'SPEI-BBVA-90812',
+        receivedBy: 'Jonathan (Gerente)',
+        notes: 'Abono inicial a cuenta de factura 4A8B',
+        createdAt: '2026-07-15T12:00:00Z'
+      }
+    ],
+    createdAt: '2026-07-07T14:30:00Z',
+    active: true
+  },
+  {
+    id: 'cxc-2',
+    folio: 'CXC-00102',
+    clientId: 'cli-2',
+    clientName: 'Repostera Dulces Creaciones S.A.',
+    saleId: 'vta-2',
+    concept: 'Suministro de Gelatinas y Moldes (Remisión R-204)',
+    issueDate: '2026-07-12',
+    dueDate: '2026-07-27',
+    creditDays: 15,
+    totalAmount: 6500,
+    amountPaid: 0,
+    remainingBalance: 6500,
+    status: 'pendiente',
+    notes: 'Crédito a 15 días autorizado por ventas.',
+    payments: [],
+    createdAt: '2026-07-12T10:00:00Z',
+    active: true
+  },
+  {
+    id: 'cxc-3',
+    folio: 'CXC-00103',
+    clientId: 'cli-4',
+    clientName: 'Panificadora El Buen Trigo',
+    saleId: 'vta-4',
+    concept: 'Pedido Harinas Extra Fina y Mejoradores Especiales',
+    issueDate: '2026-06-15',
+    dueDate: '2026-07-30',
+    creditDays: 45,
+    totalAmount: 24000,
+    amountPaid: 0,
+    remainingBalance: 24000,
+    status: 'pendiente',
+    notes: 'Cliente en seguimiento de límite de crédito ($24,000 de $25,000).',
+    payments: [],
+    createdAt: '2026-06-15T09:00:00Z',
+    active: true
+  }
+];
+
 export class MockDatabase {
   static get<T>(key: string, defaultValue: T): T {
     try {
@@ -491,7 +579,18 @@ export class MockDatabase {
     window.location.reload();
   }
 
+  static isSampleDataCleared(): boolean {
+    try {
+      return localStorage.getItem('mp_sample_data_cleared') === 'true';
+    } catch {
+      return false;
+    }
+  }
+
   static getUsers(): User[] {
+    if (this.isSampleDataCleared()) {
+      return this.get<User[]>('users', [INITIAL_USERS[0]]);
+    }
     return this.get<User[]>('users', INITIAL_USERS);
   }
 
@@ -500,6 +599,9 @@ export class MockDatabase {
   }
 
   static getRawMaterials(): RawMaterial[] {
+    if (this.isSampleDataCleared()) {
+      return this.get<RawMaterial[]>('raw_materials', []);
+    }
     return this.get<RawMaterial[]>('raw_materials', INITIAL_RAW_MATERIALS);
   }
 
@@ -508,6 +610,9 @@ export class MockDatabase {
   }
 
   static getFormulas(): Formula[] {
+    if (this.isSampleDataCleared()) {
+      return this.get<Formula[]>('formulas', []);
+    }
     return this.get<Formula[]>('formulas', INITIAL_FORMULAS);
   }
 
@@ -516,6 +621,9 @@ export class MockDatabase {
   }
 
   static getProductionOrders(): ProductionOrder[] {
+    if (this.isSampleDataCleared()) {
+      return this.get<ProductionOrder[]>('production_orders', []);
+    }
     return this.get<ProductionOrder[]>('production_orders', INITIAL_PRODUCTION_ORDERS);
   }
 
@@ -524,6 +632,9 @@ export class MockDatabase {
   }
 
   static getClients(): Client[] {
+    if (this.isSampleDataCleared()) {
+      return this.get<Client[]>('clients', []);
+    }
     return this.get<Client[]>('clients', INITIAL_CLIENTS);
   }
 
@@ -532,6 +643,9 @@ export class MockDatabase {
   }
 
   static getSales(): Sale[] {
+    if (this.isSampleDataCleared()) {
+      return this.get<Sale[]>('sales', []);
+    }
     return this.get<Sale[]>('sales', INITIAL_SALES);
   }
 
@@ -540,6 +654,9 @@ export class MockDatabase {
   }
 
   static getDeliveryRoutes(): DeliveryRoute[] {
+    if (this.isSampleDataCleared()) {
+      return this.get<DeliveryRoute[]>('delivery_routes', []);
+    }
     return this.get<DeliveryRoute[]>('delivery_routes', INITIAL_DELIVERY_ROUTES);
   }
 
@@ -548,6 +665,9 @@ export class MockDatabase {
   }
 
   static getStockMovements(): StockMovement[] {
+    if (this.isSampleDataCleared()) {
+      return this.get<StockMovement[]>('stock_movements', []);
+    }
     return this.get<StockMovement[]>('stock_movements', INITIAL_STOCK_MOVEMENTS);
   }
 
@@ -556,6 +676,9 @@ export class MockDatabase {
   }
 
   static getAuditLogs(): AuditLog[] {
+    if (this.isSampleDataCleared()) {
+      return this.get<AuditLog[]>('audit_logs', []);
+    }
     return this.get<AuditLog[]>('audit_logs', INITIAL_AUDIT_LOGS);
   }
 
@@ -572,6 +695,9 @@ export class MockDatabase {
   }
 
   static getPurchaseOrders(): PurchaseOrder[] {
+    if (this.isSampleDataCleared()) {
+      return this.get<PurchaseOrder[]>('purchase_orders', []);
+    }
     return this.get<PurchaseOrder[]>('purchase_orders', INITIAL_PURCHASE_ORDERS);
   }
 
@@ -580,6 +706,9 @@ export class MockDatabase {
   }
 
   static getTransferSheets(): TransferSheet[] {
+    if (this.isSampleDataCleared()) {
+      return this.get<TransferSheet[]>('transfer_sheets', []);
+    }
     return this.get<TransferSheet[]>('transfer_sheets', INITIAL_TRANSFER_SHEETS);
   }
 
@@ -588,6 +717,9 @@ export class MockDatabase {
   }
 
   static getSaleNotes(): SaleNote[] {
+    if (this.isSampleDataCleared()) {
+      return this.get<SaleNote[]>('sale_notes', []);
+    }
     return this.get<SaleNote[]>('sale_notes', INITIAL_SALE_NOTES);
   }
 
@@ -596,12 +728,124 @@ export class MockDatabase {
   }
 
   static getSuppliers(): Supplier[] {
+    if (this.isSampleDataCleared()) {
+      return this.get<Supplier[]>('suppliers', []);
+    }
     return this.get<Supplier[]>('suppliers', INITIAL_SUPPLIERS);
   }
 
   static saveSuppliers(data: Supplier[]) {
     this.set('suppliers', data);
   }
+
+  static getAccountsReceivable(): AccountReceivable[] {
+    if (this.isSampleDataCleared()) {
+      return this.get<AccountReceivable[]>('accounts_receivable', []);
+    }
+    return this.get<AccountReceivable[]>('accounts_receivable', INITIAL_ACCOUNTS_RECEIVABLE);
+  }
+
+  static saveAccountsReceivable(data: AccountReceivable[]) {
+    this.set('accounts_receivable', data);
+    this.recalculateClientDebts();
+  }
+
+  static getReceivablePayments(): ReceivablePayment[] {
+    if (this.isSampleDataCleared()) {
+      return this.get<ReceivablePayment[]>('receivable_payments', []);
+    }
+    return this.get<ReceivablePayment[]>('receivable_payments', INITIAL_RECEIVABLE_PAYMENTS);
+  }
+
+  static saveReceivablePayments(data: ReceivablePayment[]) {
+    this.set('receivable_payments', data);
+  }
+
+  static clearAllSampleData(keepAdmin = true): void {
+    try {
+      localStorage.setItem('mp_sample_data_cleared', 'true');
+      this.saveRawMaterials([]);
+      this.saveFormulas([]);
+      this.saveProductionOrders([]);
+      this.saveClients([]);
+      this.saveSales([]);
+      this.saveDeliveryRoutes([]);
+      this.saveStockMovements([]);
+      this.savePurchaseOrders([]);
+      this.saveTransferSheets([]);
+      this.saveSaleNotes([]);
+      this.saveSuppliers([]);
+      this.saveAccountsReceivable([]);
+      this.saveReceivablePayments([]);
+      this.saveAuditLogs([]);
+
+      if (keepAdmin) {
+        const users = this.getUsers();
+        const admins = users.filter(u => u.role === 'admin');
+        this.saveUsers(admins.length > 0 ? admins : [INITIAL_USERS[0]]);
+      } else {
+        this.saveUsers([INITIAL_USERS[0]]);
+      }
+    } catch (e) {
+      console.error('Error clearing sample data:', e);
+    }
+  }
+
+  static restoreSampleData(): void {
+    try {
+      localStorage.removeItem('mp_sample_data_cleared');
+      this.saveUsers(INITIAL_USERS);
+      this.saveRawMaterials(INITIAL_RAW_MATERIALS);
+      this.saveFormulas(INITIAL_FORMULAS);
+      this.saveProductionOrders(INITIAL_PRODUCTION_ORDERS);
+      this.saveClients(INITIAL_CLIENTS);
+      this.saveSales(INITIAL_SALES);
+      this.saveDeliveryRoutes(INITIAL_DELIVERY_ROUTES);
+      this.saveStockMovements(INITIAL_STOCK_MOVEMENTS);
+      this.savePurchaseOrders(INITIAL_PURCHASE_ORDERS);
+      this.saveTransferSheets(INITIAL_TRANSFER_SHEETS);
+      this.saveSaleNotes(INITIAL_SALE_NOTES);
+      this.saveSuppliers(INITIAL_SUPPLIERS);
+      this.saveAccountsReceivable(INITIAL_ACCOUNTS_RECEIVABLE);
+      this.saveReceivablePayments(INITIAL_RECEIVABLE_PAYMENTS);
+      this.saveAuditLogs(INITIAL_AUDIT_LOGS);
+      this.saveSystemConfig(INITIAL_SYSTEM_CONFIG);
+    } catch (e) {
+      console.error('Error restoring sample data:', e);
+    }
+  }
+
+  static recalculateClientDebts() {
+    try {
+      const receivables = this.get<AccountReceivable[]>('accounts_receivable', INITIAL_ACCOUNTS_RECEIVABLE);
+      const clients = this.getClients();
+      
+      const debtByClient = new Map<string, number>();
+      receivables.forEach(r => {
+        if (r.active !== false && r.status !== 'liquidado' && r.status !== 'cancelado') {
+          const current = debtByClient.get(r.clientId) || 0;
+          debtByClient.set(r.clientId, current + (r.remainingBalance || 0));
+        }
+      });
+
+      let changed = false;
+      const updatedClients = clients.map(c => {
+        const calculated = debtByClient.get(c.id) ?? c.currentDebt;
+        if (c.currentDebt !== calculated) {
+          changed = true;
+          return { ...c, currentDebt: calculated };
+        }
+        return c;
+      });
+
+      if (changed) {
+        this.set('clients', updatedClients);
+      }
+    } catch (e) {
+      console.warn('Error recalculating client debts:', e);
+    }
+  }
+
 
   static addAuditLog(user: string, action: string, module: string, details: string) {
     const logs = this.getAuditLogs();

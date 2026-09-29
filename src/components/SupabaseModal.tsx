@@ -6,7 +6,10 @@ import {
 } from 'lucide-react';
 import { 
   SUPABASE_SQL_SCRIPT, 
+  SUPABASE_CLEAN_SQL_SCRIPT,
+  SUPABASE_PURGE_SAMPLE_DATA_SQL,
   seedSupabaseFromClient, 
+  clearSampleDataFromSupabase,
   checkSupabaseConnection 
 } from '../services/supabaseService';
 import { 
@@ -26,7 +29,7 @@ import { MockDatabase } from '../data';
 interface SupabaseModalProps {
   isOpen: boolean;
   onClose: () => void;
-  initialTab?: 'status' | 'sync' | 'history' | 'sql' | 'tables';
+  initialTab?: 'status' | 'sync' | 'history' | 'sql' | 'tables' | 'clean';
 }
 
 export const SupabaseModal: React.FC<SupabaseModalProps> = ({ 
@@ -35,7 +38,12 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({
   initialTab = 'status'
 }) => {
   const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState<'status' | 'sync' | 'history' | 'sql' | 'tables'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'status' | 'sync' | 'history' | 'sql' | 'tables' | 'clean'>(initialTab);
+  const [sqlMode, setSqlMode] = useState<'clean' | 'full' | 'purge'>('clean');
+  const [isPurging, setIsPurging] = useState(false);
+  const [purgeResult, setPurgeResult] = useState<{ success: boolean; message: string; details?: any } | null>(null);
+  const [isSampleCleared, setIsSampleCleared] = useState(MockDatabase.isSampleDataCleared());
+  const [keepAdmin, setKeepAdmin] = useState(true);
   
   // Health & Diagnostics
   const [health, setHealth] = useState<SupabaseHealthStatus>({
@@ -115,20 +123,63 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({
 
   if (!isOpen) return null;
 
+  const getCurrentSQL = () => {
+    if (sqlMode === 'clean') return SUPABASE_CLEAN_SQL_SCRIPT;
+    if (sqlMode === 'purge') return SUPABASE_PURGE_SAMPLE_DATA_SQL;
+    return SUPABASE_SQL_SCRIPT;
+  };
+
   const handleCopySQL = () => {
-    navigator.clipboard.writeText(SUPABASE_SQL_SCRIPT);
+    navigator.clipboard.writeText(getCurrentSQL());
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };
 
   const handleDownloadSQL = () => {
+    const sql = getCurrentSQL();
+    const filename = sqlMode === 'clean' 
+      ? 'supabase_esquema_limpio_produccion.sql' 
+      : sqlMode === 'purge'
+        ? 'supabase_vaciar_datos_muestra.sql'
+        : 'supabase_erp_materiasprimas_completo.sql';
     const element = document.createElement('a');
-    const file = new Blob([SUPABASE_SQL_SCRIPT], { type: 'text/plain;charset=utf-8' });
+    const file = new Blob([sql], { type: 'text/plain;charset=utf-8' });
     element.href = URL.createObjectURL(file);
-    element.download = 'supabase_erp_materiasprimas_schema_seeds.sql';
+    element.download = filename;
     document.body.appendChild(element);
     element.click();
     document.body.removeChild(element);
+  };
+
+  const handlePurgeSampleData = async () => {
+    if (!confirm('¿Estás seguro de que deseas ELIMINAR TODOS los datos de muestra del sistema y de Supabase?\\n\\nEsta acción vaciará el catálogo de prueba, ventas, órdenes, clientes y notas para que puedas registrar tus datos reales. Los datos NO se volverán a cargar al recargar.')) {
+      return;
+    }
+    setIsPurging(true);
+    setPurgeResult(null);
+
+    // 1. Limpiar localmente en MockDatabase permanentemente
+    MockDatabase.clearAllSampleData(keepAdmin);
+    setIsSampleCleared(true);
+
+    // 2. Limpiar en Supabase Cloud
+    const res = await clearSampleDataFromSupabase(keepAdmin);
+    setPurgeResult(res);
+    setIsPurging(false);
+
+    // 3. Ping Supabase
+    await checkSupabasePing();
+  };
+
+  const handleRestoreSampleData = () => {
+    if (confirm('¿Deseas restaurar los datos de muestra originales en el sistema?')) {
+      MockDatabase.restoreSampleData();
+      setIsSampleCleared(false);
+      setPurgeResult({
+        success: true,
+        message: 'Datos de muestra restaurados en el sistema local.'
+      });
+    }
   };
 
   const handleSeed = async () => {
@@ -166,8 +217,11 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({
     { name: 'purchase_orders', desc: 'Órdenes de compra a proveedores de harinas, lácteos y químicos', rows: 2 },
     { name: 'transfer_sheets', desc: 'Hojas oficiales de traslado de productos con folios y destinos', rows: 1 },
     { name: 'sale_notes', desc: 'Notas de venta comerciales Miauloo foliadas', rows: 1 },
+    { name: 'suppliers', desc: 'Directorio de proveedores de materias primas, plazos de pago y evaluación', rows: 5 },
     { name: 'audit_logs', desc: 'Bitácora inmutable de auditoría de seguridad y movimientos clave', rows: 4 },
     { name: 'system_config', desc: 'Límites de descuento y parámetros crediticios del ERP', rows: 1 },
+    { name: 'accounts_receivable', desc: 'Cartera de crédito, folios CXC, saldos pendientes y vencimientos', rows: 3 },
+    { name: 'receivable_payments', desc: 'Historial de cobros, abonos parciales, liquidaciones y recibos', rows: 1 },
   ];
 
   return (
@@ -304,7 +358,19 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({
             }`}
           >
             <Table className="w-4 h-4" />
-            <span>5. Catálogo de Tablas (13)</span>
+            <span>5. Catálogo de Tablas (16)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('clean')}
+            className={`py-3 px-3.5 text-xs font-bold border-b-2 transition-all flex items-center space-x-1.5 whitespace-nowrap ${
+              activeTab === 'clean'
+                ? 'border-rose-600 text-rose-700 bg-white shadow-xs rounded-t-lg'
+                : 'border-transparent text-slate-600 hover:text-rose-700'
+            }`}
+          >
+            <Trash2 className="w-4 h-4 text-rose-500" />
+            <span>6. Borrar Datos de Muestra</span>
           </button>
         </div>
 
@@ -715,21 +781,31 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({
             </div>
           )}
 
-          {/* TAB 4: SCRIPT SQL COMPLETO */}
+          {/* TAB 4: SCRIPT SQL COMPLETO & SELECTOR DE MODO */}
           {activeTab === 'sql' && (
             <div className="space-y-4">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                 <div>
-                  <h4 className="font-extrabold text-sm text-slate-900">Script SQL DDL + DML (13 Tablas y Políticas RLS)</h4>
+                  <h4 className="font-extrabold text-sm text-slate-900">
+                    {sqlMode === 'clean' 
+                      ? 'Script SQL: Esquema Limpio para Producción (Sin datos de muestra)' 
+                      : sqlMode === 'purge'
+                        ? 'Script SQL: Vaciar y Purgar Datos de Muestra en Supabase'
+                        : 'Script SQL: Completo (16 Tablas + Datos de Muestra)'}
+                  </h4>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Pega este script en el SQL Editor de tu panel de Supabase para inicializar la base de datos completa.
+                    {sqlMode === 'clean'
+                      ? 'Crea las 16 tablas, RLS, políticas y usuario Administrador sin productos ni órdenes de prueba.'
+                      : sqlMode === 'purge'
+                        ? 'Vacía todas las tablas de muestra en Supabase respetando al usuario Administrador.'
+                        : 'Crea todas las tablas e inserta los datos de ejemplo de panificación y repostería.'}
                   </p>
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
                   <button
                     onClick={handleCopySQL}
-                    className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-xs transition-all flex items-center gap-1.5"
+                    className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
                   >
                     {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                     <span>{copied ? '¡Copiado!' : 'Copiar SQL'}</span>
@@ -737,7 +813,7 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({
 
                   <button
                     onClick={handleDownloadSQL}
-                    className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-bold px-3.5 py-2 rounded-xl shadow-xs transition-all flex items-center gap-1.5"
+                    className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-bold px-3.5 py-2 rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
                   >
                     <Download className="w-3.5 h-3.5" />
                     <span>Descargar .sql</span>
@@ -755,14 +831,59 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({
                 </div>
               </div>
 
+              {/* Selector de tipo de Script SQL */}
+              <div className="bg-slate-100 p-1.5 rounded-xl border border-slate-200 flex flex-wrap gap-1.5 text-xs font-bold">
+                <button
+                  onClick={() => setSqlMode('clean')}
+                  className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                    sqlMode === 'clean'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>1. Esquema Limpio (Sin datos de prueba) - Recomendado</span>
+                </button>
+
+                <button
+                  onClick={() => setSqlMode('full')}
+                  className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                    sqlMode === 'full'
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <Database className="w-3.5 h-3.5" />
+                  <span>2. Script Completo (Con datos de muestra)</span>
+                </button>
+
+                <button
+                  onClick={() => setSqlMode('purge')}
+                  className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                    sqlMode === 'purge'
+                      ? 'bg-rose-600 text-white shadow-xs'
+                      : 'text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>3. Script para Vaciar Tablas en Supabase</span>
+                </button>
+              </div>
+
               {/* Code viewer */}
               <div className="relative rounded-2xl bg-slate-950 text-slate-200 border border-slate-800 shadow-xl overflow-hidden font-mono text-xs">
                 <div className="p-3 bg-slate-900 border-b border-slate-800 flex justify-between items-center text-[11px] text-slate-400">
-                  <span>supabase_erp_materiasprimas_schema_seeds.sql (750+ líneas)</span>
-                  <span className="text-emerald-400 font-bold">13 Tablas • RLS • 100% Compatible</span>
+                  <span>
+                    {sqlMode === 'clean' 
+                      ? 'supabase_esquema_limpio_produccion.sql' 
+                      : sqlMode === 'purge'
+                        ? 'supabase_vaciar_datos_muestra.sql'
+                        : 'supabase_erp_materiasprimas_completo.sql'}
+                  </span>
+                  <span className="text-emerald-400 font-bold">16 Tablas • RLS • 100% Compatible con PostgreSQL</span>
                 </div>
                 <pre className="p-4 max-h-96 overflow-y-auto leading-relaxed text-slate-300 selection:bg-emerald-500 selection:text-black">
-                  {SUPABASE_SQL_SCRIPT}
+                  {getCurrentSQL()}
                 </pre>
               </div>
             </div>
@@ -773,13 +894,13 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({
             <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <div>
-                  <h4 className="font-extrabold text-sm text-slate-900">Estructura de las 13 Tablas del ERP</h4>
+                  <h4 className="font-extrabold text-sm text-slate-900">Estructura de las 16 Tablas del ERP</h4>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Arquitectura relacional en PostgreSQL alojada en Supabase con Row Level Security.
+                    Arquitectura relacional en PostgreSQL alojada en Supabase con Row Level Security y políticas anónimas.
                   </p>
                 </div>
                 <span className="bg-emerald-100 text-emerald-800 text-xs font-bold px-3 py-1 rounded-full">
-                  13 Tablas Diseñadas
+                  16 Tablas Diseñadas
                 </span>
               </div>
 
@@ -799,6 +920,154 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* TAB 6: BORRAR DATOS DE MUESTRA Y PRODUCCIÓN LIMPIA */}
+          {activeTab === 'clean' && (
+            <div className="space-y-6">
+              
+              {/* Estado actual del sistema */}
+              <div className={`p-5 rounded-2xl border ${
+                isSampleCleared
+                  ? 'bg-emerald-50/80 border-emerald-300 text-emerald-950'
+                  : 'bg-amber-50/80 border-amber-300 text-amber-950'
+              }`}>
+                <div className="flex items-start gap-3">
+                  {isSampleCleared ? (
+                    <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertTriangle className="w-6 h-6 text-amber-600 shrink-0 mt-0.5" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-extrabold text-base">
+                        {isSampleCleared
+                          ? 'Modo Producción Limpia Activo'
+                          : 'Datos de Muestra y Prueba Activos en el Sistema'}
+                      </h4>
+                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                        isSampleCleared
+                          ? 'bg-emerald-200 text-emerald-800'
+                          : 'bg-amber-200 text-amber-900'
+                      }`}>
+                        {isSampleCleared ? 'Base Limpia' : 'Modo Demo'}
+                      </span>
+                    </div>
+                    <p className="text-xs mt-1 text-slate-600 leading-relaxed">
+                      {isSampleCleared
+                        ? 'El sistema está configurado en modo producción limpia: todos los datos de prueba fueron eliminados y NO se volverán a cargar al recargar o reiniciar la sesión. Puedes ingresar tus materias primas y órdenes reales.'
+                        : 'El sistema actualmente cuenta con datos de muestra predeterminados (harinas, bizcochos, clientes y ventas de demostración). Puedes vaciarlos aquí tanto localmente como en Supabase.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tarjeta de acción de vaciado */}
+              <div className="bg-white rounded-2xl border border-rose-200 shadow-sm p-6 space-y-4">
+                <div className="flex items-center gap-2 text-rose-700">
+                  <Trash2 className="w-5 h-5" />
+                  <h4 className="font-extrabold text-base">Vaciar Datos de Muestra (del Sistema y de Supabase)</h4>
+                </div>
+
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Esta operación elimina permanentemente los productos, materias primas, fórmulas, órdenes de producción, movimientos de inventario, clientes, ventas, notas y hojas de traslado de prueba.
+                  <br />
+                  <b className="text-slate-900">Garantía permanente:</b> Se activa una bandera en el sistema que impide que los datos de prueba vuelvan a generarse o reaparecer en futuras recargas.
+                </p>
+
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between">
+                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-800 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={keepAdmin}
+                      onChange={(e) => setKeepAdmin(e.target.checked)}
+                      className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer"
+                    />
+                    <span>Conservar cuenta de Administrador Maestro para no perder acceso</span>
+                  </label>
+                  <span className="text-[11px] text-slate-500 font-mono">Recomendado</span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 pt-2">
+                  <button
+                    onClick={handlePurgeSampleData}
+                    disabled={isPurging}
+                    className="bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs px-5 py-3 rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 active:scale-95"
+                  >
+                    <Trash2 className={`w-4 h-4 ${isPurging ? 'animate-bounce' : ''}`} />
+                    <span>{isPurging ? 'Vaciando Datos en Supabase y Local...' : 'Vaciar Todos los Datos de Muestra Ahora'}</span>
+                  </button>
+
+                  {isSampleCleared && (
+                    <button
+                      onClick={handleRestoreSampleData}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-4 py-3 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Restaurar Datos de Demostración</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Resultado de la purga */}
+                {purgeResult && (
+                  <div className={`p-4 rounded-xl border text-xs ${
+                    purgeResult.success
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                      : 'bg-rose-50 border-rose-300 text-rose-900'
+                  }`}>
+                    <div className="flex items-center gap-2 font-bold mb-2">
+                      {purgeResult.success ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <AlertTriangle className="w-4 h-4 text-rose-600" />}
+                      <span>{purgeResult.message}</span>
+                    </div>
+
+                    {purgeResult.details && (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-200/60 font-mono text-[10px]">
+                        {Object.entries(purgeResult.details).map(([table, status]) => (
+                          <div key={table} className="bg-white/80 p-1.5 rounded border border-slate-200/80">
+                            <span className="font-semibold text-slate-700">{table}:</span>{' '}
+                            <span className={status === 'OK (Vaciado)' || String(status).includes('OK') ? 'text-emerald-700 font-bold' : 'text-rose-600'}>
+                              {String(status)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Script SQL directo para ejecutar en Supabase */}
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-3">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h4 className="font-extrabold text-sm text-slate-900">
+                      ¿Prefieres vaciar las tablas directamente en el Editor SQL de Supabase?
+                    </h4>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Copia esta sentencia SQL y ejecútala en Supabase para limpiar todas las tablas en 1 segundo.
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(SUPABASE_PURGE_SAMPLE_DATA_SQL);
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2500);
+                    }}
+                    className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copied ? '¡Copiado!' : 'Copiar SQL de Vaciado'}</span>
+                  </button>
+                </div>
+
+                <pre className="p-3 bg-slate-950 text-slate-300 rounded-xl font-mono text-[11px] max-h-48 overflow-y-auto">
+                  {SUPABASE_PURGE_SAMPLE_DATA_SQL}
+                </pre>
+              </div>
+
             </div>
           )}
 
