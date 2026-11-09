@@ -4,6 +4,7 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { SaleNote, TransferSheet } from '../types';
+import { MIAULOO_LOGO_BASE64 } from './miaulooLogoBase64';
 
 export const MIAULOO_LOGO = 'https://mwtzisudncwrlsizmgap.supabase.co/storage/v1/object/public/logo/miauloo.png';
 
@@ -198,23 +199,32 @@ export function exportToPDF(
   
   // Header background
   doc.setFillColor(3, 43, 78); // #032B4E
-  doc.rect(0, 0, pageWidth, 20, 'F');
+  doc.rect(0, 0, pageWidth, 24, 'F');
+
+  // Miauloo Logo (PNG base64: ratio ~0.815 -> width 14mm, height 17mm)
+  try {
+    if (MIAULOO_LOGO_BASE64) {
+      doc.addImage(MIAULOO_LOGO_BASE64, 'PNG', 12, 3.5, 14, 17);
+    }
+  } catch (err) {
+    console.warn('Could not render logo in table PDF header:', err);
+  }
 
   // Title
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(13);
-  doc.text('MIAULOO ERP • ' + title.toUpperCase(), 14, 11);
+  doc.setFontSize(12.5);
+  doc.text('MIAULOO ERP • ' + title.toUpperCase(), 30, 11);
 
   // Subtitle / Date
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
+  doc.setFontSize(8);
   doc.setTextColor(203, 213, 225);
-  doc.text(`Generado el: ${dateStr} • Registros totales: ${rows.length}`, 14, 16);
+  doc.text(`Generado el: ${dateStr} • Registros totales: ${rows.length}`, 30, 17);
 
   // AutoTable
   autoTable(doc, {
-    startY: 25,
+    startY: 28,
     head: [columns],
     body: rows.map(r => r.map(c => (c !== null && c !== undefined ? String(c) : ''))),
     theme: 'striped',
@@ -270,17 +280,26 @@ export function exportSaleNoteToPDF(note: SaleNote) {
   doc.setFillColor(30, 58, 138); // #1E3A8A
   doc.rect(0, 0, pageWidth, 24, 'F');
 
+  // Miauloo Logo (PNG base64)
+  try {
+    if (MIAULOO_LOGO_BASE64) {
+      doc.addImage(MIAULOO_LOGO_BASE64, 'PNG', 12, 3, 14, 17);
+    }
+  } catch (err) {
+    console.warn('Could not render logo in sale note PDF:', err);
+  }
+
   // Title
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(18);
-  doc.text('MIAULOO', 16, 12);
+  doc.setFontSize(17);
+  doc.text('MIAULOO', 30, 11);
 
   // Verse / slogan
   doc.setFont('helvetica', 'italic');
-  doc.setFontSize(7.5);
+  doc.setFontSize(7);
   doc.setTextColor(224, 242, 254);
-  doc.text('"PURIFICAME CON HISOPO, Y SERÉ LIMPIO; LÁVAME, Y SERÉ MÁS BLANCO QUE LA NIEVE"', 16, 18);
+  doc.text('"PURIFICAME CON HISOPO, Y SERÉ LIMPIO; LÁVAME, Y SERÉ MÁS BLANCO QUE LA NIEVE"', 30, 18);
 
   // Red Note badge
   doc.setFillColor(254, 242, 242);
@@ -562,14 +581,23 @@ export function exportTransferSheetToPDF(sheet: TransferSheet) {
   doc.setFillColor(11, 37, 69); // #0B2545
   doc.rect(0, 0, pageWidth, 22, 'F');
 
+  // Miauloo Logo (PNG base64)
+  try {
+    if (MIAULOO_LOGO_BASE64) {
+      doc.addImage(MIAULOO_LOGO_BASE64, 'PNG', 12, 2.5, 13, 16);
+    }
+  } catch (err) {
+    console.warn('Could not render logo in transfer sheet PDF:', err);
+  }
+
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(15);
-  doc.text('HOJA DE TRASLADO DE PRODUCTOS', 16, 12);
-  doc.setFontSize(8.5);
+  doc.setFontSize(14);
+  doc.text('HOJA DE TRASLADO DE PRODUCTOS', 28, 11);
+  doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(203, 213, 225);
-  doc.text('MIAULOO • Control Logístico de Mercancía en Tránsito', 16, 17);
+  doc.text('MIAULOO • Control Logístico de Mercancía en Tránsito', 28, 16.5);
 
   // Folio badge
   doc.setFillColor(238, 242, 255);
