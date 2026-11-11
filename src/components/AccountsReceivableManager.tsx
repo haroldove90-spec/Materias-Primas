@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { AccountReceivable, ReceivablePayment, Client, User } from '../types';
 import { MockDatabase } from '../data';
-import { exportToExcel, exportToPDF } from '../utils/exportUtils';
+import { exportToExcel, exportToPDF, printTableReport } from '../utils/exportUtils';
 import { recordSaveTelemetry } from '../services/supabaseTelemetry';
 import { 
   fetchAccountsReceivableFromSupabase, 
@@ -573,6 +573,22 @@ Agradecemos su atención y quedamos a sus órdenes para la recepción de su comp
     exportToPDF('Reporte de Cuentas por Cobrar y Cartera de Clientes', headers, rows);
   };
 
+  // Direct print report
+  const handlePrintReport = () => {
+    const headers = ['Folio', 'Cliente', 'Concepto', 'Total', 'Abonado', 'Saldo', 'Vence', 'Estado'];
+    const rows = filteredReceivables.map(r => [
+      r.folio,
+      r.clientName,
+      r.concept.length > 25 ? r.concept.substring(0, 22) + '...' : r.concept,
+      `$${r.totalAmount.toLocaleString('es-MX')}`,
+      `$${r.amountPaid.toLocaleString('es-MX')}`,
+      `$${r.remainingBalance.toLocaleString('es-MX')}`,
+      r.dueDate,
+      r.status.toUpperCase()
+    ]);
+    printTableReport('Reporte de Cuentas por Cobrar y Cartera de Clientes', headers, rows, 'Cuentas_Por_Cobrar_Miauloo');
+  };
+
   const getStatusBadge = (rec: AccountReceivable) => {
     const now = new Date().toISOString().split('T')[0];
     const isOverdue = rec.status !== 'liquidado' && rec.dueDate < now;
@@ -732,8 +748,18 @@ Agradecemos su atención y quedamos a sus órdenes para la recepción de su comp
             <button
               onClick={handleExportPDF}
               className="bg-rose-600 hover:bg-rose-700 text-white px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+              title="Descargar reporte en formato PDF"
             >
-              <Printer className="w-3.5 h-3.5" /> PDF
+              <Download className="w-3.5 h-3.5" /> PDF
+            </button>
+
+            {/* Print Direct */}
+            <button
+              onClick={handlePrintReport}
+              className="bg-blue-800 hover:bg-blue-900 text-white px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+              title="Mandar reporte a la impresora"
+            >
+              <Printer className="w-3.5 h-3.5" /> Imprimir
             </button>
 
             {/* New Receivable Button */}

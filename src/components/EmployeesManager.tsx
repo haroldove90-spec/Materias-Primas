@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Users, UserPlus, Shield, Lock, Eye, EyeOff, Sparkles, 
   Search, Edit, Trash2, CheckCircle, XCircle, RefreshCw, 
-  Mail, Phone, Briefcase, Building2, Download, FileText, 
+  Mail, Phone, Briefcase, Building2, Download, FileText, Printer,
   KeyRound, ShieldCheck, Check, X, AlertTriangle, MessageSquare, Copy, Share2, ExternalLink
 } from 'lucide-react';
 import { User, RoleType } from '../types';
@@ -12,7 +12,7 @@ import {
   saveUserToSupabase, 
   deleteUserFromSupabase 
 } from '../services/supabaseService';
-import { exportToExcel, exportToPDF } from '../utils/exportUtils';
+import { exportToExcel, exportToPDF, printTableReport } from '../utils/exportUtils';
 
 interface EmployeesManagerProps {
   currentUser: User;
@@ -324,6 +324,19 @@ export const EmployeesManager: React.FC<EmployeesManagerProps> = ({ currentUser 
     exportToPDF('Directorio de Empleados y Accesos - Miauloo ERP', headers, rows, `Empleados_Miauloo_${new Date().toISOString().slice(0, 10)}`);
   };
 
+  const handlePrintReport = () => {
+    const headers = ['Nombre', 'Usuario', 'Rol', 'Puesto / Depto', 'Teléfono', 'Estado'];
+    const rows = filteredUsers.map(u => [
+      u.name,
+      `@${u.username}`,
+      u.role.toUpperCase(),
+      `${u.jobTitle || '-'} / ${u.department || '-'}`,
+      u.phone || '-',
+      u.active ? 'Activo' : 'Inactivo'
+    ]);
+    printTableReport('Directorio de Empleados y Accesos - Miauloo ERP', headers, rows, `Empleados_Miauloo_${new Date().toISOString().slice(0, 10)}`);
+  };
+
   // Filtering
   const filteredUsers = users.filter(u => {
     const matchesSearch = 
@@ -454,10 +467,20 @@ Rol: ${getRoleDisplayName(u.role)}`;
 
           <button
             onClick={handleExportPDF}
-            className="px-3.5 py-2.5 rounded-xl border border-slate-200 text-rose-700 bg-rose-50/60 hover:bg-rose-100/60 text-xs font-semibold flex items-center gap-1.5 transition-all"
+            className="px-3.5 py-2.5 rounded-xl border border-slate-200 text-rose-700 bg-rose-50/60 hover:bg-rose-100/60 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
+            title="Descargar listado en PDF"
           >
             <FileText className="w-4 h-4" />
             <span>PDF</span>
+          </button>
+
+          <button
+            onClick={handlePrintReport}
+            className="px-3.5 py-2.5 rounded-xl border border-slate-200 text-blue-700 bg-blue-50/60 hover:bg-blue-100/60 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
+            title="Mandar a la impresora"
+          >
+            <Printer className="w-4 h-4" />
+            <span>Imprimir</span>
           </button>
 
           <button

@@ -6,7 +6,8 @@ import {
 } from 'lucide-react';
 import { Sale, OrderItem, User, Client } from '../types';
 import { MockDatabase } from '../data';
-import { exportToExcel, exportToPDF, printElement } from '../utils/exportUtils';
+import { exportToExcel, exportToPDF, printTableReport, printElement, MIAULOO_LOGO } from '../utils/exportUtils';
+import { MIAULOO_LOGO_BASE64 } from '../utils/miaulooLogoBase64';
 import { recordSaveTelemetry } from '../services/supabaseTelemetry';
 import { 
   fetchSalesFromSupabase, 
@@ -252,6 +253,20 @@ export const SalesOrdersManager: React.FC<SalesOrdersManagerProps> = ({ currentU
     exportToPDF('Historial y Registro de Ventas Miauloo', headers, rows);
   };
 
+  const handlePrintReport = () => {
+    const headers = ['Folio', 'Fecha', 'Cliente', 'Artículos', 'Pago', 'Total', 'Estatus'];
+    const rows = filteredSales.map(s => [
+      s.id,
+      s.createdAt ? new Date(s.createdAt).toLocaleDateString('es-MX') : '',
+      s.clientName,
+      s.items.length.toString(),
+      s.paymentType,
+      `$${s.total.toLocaleString('es-MX')}`,
+      s.status
+    ]);
+    printTableReport('Historial y Registro de Ventas Miauloo', headers, rows, 'Historial_Ventas_Miauloo');
+  };
+
   const getStatusBadge = (status: Sale['status']) => {
     switch (status) {
       case 'Entregado':
@@ -393,8 +408,17 @@ export const SalesOrdersManager: React.FC<SalesOrdersManagerProps> = ({ currentU
             <button
               onClick={handleExportPDF}
               className="bg-rose-600 hover:bg-rose-700 text-white px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+              title="Descargar listado en PDF"
             >
-              <Printer className="w-3.5 h-3.5" /> PDF
+              <Download className="w-3.5 h-3.5" /> PDF
+            </button>
+
+            <button
+              onClick={handlePrintReport}
+              className="bg-blue-800 hover:bg-blue-900 text-white px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+              title="Mandar listado de ventas a la impresora"
+            >
+              <Printer className="w-3.5 h-3.5" /> Imprimir
             </button>
 
             {onGoToPOS && (
@@ -690,10 +714,13 @@ export const SalesOrdersManager: React.FC<SalesOrdersManagerProps> = ({ currentU
                 onClick={() => {
                   printElement(`
                     <div style="font-family: system-ui, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; color: #0f172a;">
-                      <div style="border-bottom: 2px solid #1e3a8a; padding-bottom: 10px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-start;">
-                        <div>
-                          <h2 style="margin: 0; color: #1e3a8a; font-size: 20px; font-weight: 900;">MIAULOO ERP</h2>
-                          <p style="margin: 2px 0 0 0; font-size: 10px; color: #64748b;">Comprobante de Venta Comercial</p>
+                      <div style="border-bottom: 2px solid #1e3a8a; padding-bottom: 12px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                          <img src="${MIAULOO_LOGO_BASE64 || MIAULOO_LOGO}" alt="Miauloo" style="height: 42px; width: auto; object-fit: contain;" />
+                          <div>
+                            <h2 style="margin: 0; color: #1e3a8a; font-size: 19px; font-weight: 900; letter-spacing: 0.5px;">MIAULOO ERP</h2>
+                            <p style="margin: 2px 0 0 0; font-size: 10.5px; color: #64748b; font-weight: 600;">Comprobante Oficial de Venta</p>
+                          </div>
                         </div>
                         <div style="text-align: right;">
                           <div style="font-weight: 900; font-size: 14px; color: #dc2626;">FOLIO: ${selectedSale.id}</div>

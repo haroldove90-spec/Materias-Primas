@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { MockDatabase } from '../data';
 import { RawMaterial, Formula, ProductionOrder, StockMovement, User } from '../types';
-import { exportToExcel, exportToPDF } from '../utils/exportUtils';
+import { exportToExcel, exportToPDF, printTableReport } from '../utils/exportUtils';
 import { recordSaveTelemetry } from '../services/supabaseTelemetry';
 
 interface ProductionRoleProps {
@@ -800,9 +800,17 @@ export default function ProductionRole({ onBack, currentUser, activeTab: propsAc
                   </button>
                   <button
                     onClick={() => exportToPDF('Registro de Órdenes de Producción Miauloo', ['Folio', 'Receta / Producto', 'Volumen (kg)', 'Estatus', 'Operador', 'Fecha'], productionOrders.map(po => [po.id, formulas.find(f => f.id === po.formulaId)?.name || po.formulaId, `${po.quantityLiters} kg`, po.status.toUpperCase(), po.operator, new Date(po.createdAt).toLocaleDateString('es-MX')]))}
-                    className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-all"
+                    className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                    title="Descargar Órdenes en PDF"
                   >
-                    <Printer className="w-3.5 h-3.5" /> PDF
+                    <Download className="w-3.5 h-3.5" /> PDF
+                  </button>
+                  <button
+                    onClick={() => printTableReport('Registro de Órdenes de Producción Miauloo', ['Folio', 'Receta / Producto', 'Volumen (kg)', 'Estatus', 'Operador', 'Fecha'], productionOrders.map(po => [po.id, formulas.find(f => f.id === po.formulaId)?.name || po.formulaId, `${po.quantityLiters} kg`, po.status.toUpperCase(), po.operator, new Date(po.createdAt).toLocaleDateString('es-MX')]))}
+                    className="bg-blue-800 hover:bg-blue-900 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                    title="Mandar a la impresora"
+                  >
+                    <Printer className="w-3.5 h-3.5" /> Imprimir
                   </button>
                 </div>
               </div>

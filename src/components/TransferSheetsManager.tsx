@@ -10,6 +10,7 @@ import {
   exportToExcel, 
   exportToPDF, 
   exportTransferSheetToPDF, 
+  printTransferSheetReceipt,
   printElement 
 } from '../utils/exportUtils';
 import { recordSaveTelemetry } from '../services/supabaseTelemetry';
@@ -715,7 +716,7 @@ export function TransferSheetsManager({ currentUser, onRefreshParent }: Transfer
                         <div className="flex items-center justify-end space-x-1.5">
                           {/* IMPRIMIR DIRECTO */}
                           <button
-                            onClick={() => printElement('printable-transfer-sheet', `Hoja_Traslado_${sheet.folio}`)}
+                            onClick={() => printTransferSheetReceipt(sheet)}
                             className="p-1.5 text-blue-700 hover:text-blue-900 hover:bg-blue-100 rounded-lg transition-colors cursor-pointer"
                             title="Imprimir Hoja de Traslado Directo"
                           >
@@ -799,7 +800,7 @@ export function TransferSheetsManager({ currentUser, onRefreshParent }: Transfer
                   <Download className="w-3.5 h-3.5 mr-1.5" /> Descargar PDF
                 </button>
                 <button
-                  onClick={() => printElement('printable-transfer-sheet', `Hoja_Traslado_${selectedSheet.folio}`)}
+                  onClick={() => printTransferSheetReceipt(selectedSheet)}
                   className="bg-[#0B2545] hover:bg-[#133966] text-white px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center transition-all shadow-xs cursor-pointer"
                   title="Mandar a imprimir directamente a la impresora"
                 >

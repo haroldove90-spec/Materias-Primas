@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Package, Plus, Search, Filter, AlertTriangle, ArrowUpDown, 
-  Download, FileText, RefreshCw, Check, X, Edit, Trash2, 
+  Download, FileText, Printer, RefreshCw, Check, X, Edit, Trash2, 
   Layers, DollarSign, Calendar, Tag, PlusCircle, MinusCircle, CheckCircle2,
   Eye, XCircle
 } from 'lucide-react';
 import { RawMaterial, User } from '../types';
 import { MockDatabase } from '../data';
-import { exportToExcel, exportToPDF } from '../utils/exportUtils';
+import { exportToExcel, exportToPDF, printTableReport } from '../utils/exportUtils';
 import { 
   fetchRawMaterialsFromSupabase, 
   saveRawMaterialToSupabase, 
@@ -332,6 +332,20 @@ export const AdminRawMaterialsManager: React.FC<AdminRawMaterialsManagerProps> =
     exportToPDF('Inventario de Materias Primas e Insumos - Miauloo ERP', headers, rows, `Materias_Primas_Miauloo_${new Date().toISOString().slice(0, 10)}`);
   };
 
+  const handlePrintReport = () => {
+    const headers = ['SKU', 'Materia Prima', 'Stock', 'Unidad', 'Costo Unit.', 'Valor Total', 'Estado'];
+    const rows = filteredMaterials.map(m => [
+      m.sku,
+      m.name,
+      m.stock.toString(),
+      m.unit,
+      `$${m.costPerUnit.toFixed(2)}`,
+      `$${(m.stock * m.costPerUnit).toLocaleString()}`,
+      m.stock <= 0 ? 'AGOTADO' : m.stock <= m.minStock ? 'BAJO' : 'OK'
+    ]);
+    printTableReport('Inventario de Materias Primas e Insumos - Miauloo ERP', headers, rows, `Materias_Primas_Miauloo_${new Date().toISOString().slice(0, 10)}`);
+  };
+
   // Filter materials
   const filteredMaterials = materials.filter(m => {
     const matchesSearch = 
@@ -397,11 +411,20 @@ export const AdminRawMaterialsManager: React.FC<AdminRawMaterialsManagerProps> =
 
           <button
             onClick={handleExportPDF}
-            className="px-3.5 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold flex items-center gap-2 transition-colors"
+            className="px-3.5 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer"
             title="Exportar a PDF"
           >
             <FileText className="w-3.5 h-3.5 text-rose-600" />
             <span>PDF</span>
+          </button>
+
+          <button
+            onClick={handlePrintReport}
+            className="px-3.5 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer"
+            title="Mandar a la Impresora"
+          >
+            <Printer className="w-3.5 h-3.5 text-blue-600" />
+            <span>Imprimir</span>
           </button>
 
           <button

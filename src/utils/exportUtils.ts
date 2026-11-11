@@ -61,25 +61,38 @@ export function printElement(
     try {
       // Remove any previous print iframes
       const oldIframe = document.getElementById('miauloo-print-iframe');
-      if (oldIframe) {
-        document.body.removeChild(oldIframe);
+      if (oldIframe && oldIframe.parentNode) {
+        oldIframe.parentNode.removeChild(oldIframe);
       }
 
-      // Create an invisible iframe
+      // Create an invisible but fully dimensioned iframe at origin (0,0)
+      // CRITICAL: NEVER use visibility: hidden or width: 0 / height: 0,
+      // and NEVER use left: -10000px (Blink calculates negative print bounds -> blank page)!
       const iframe = document.createElement('iframe');
       iframe.id = 'miauloo-print-iframe';
-      iframe.style.position = 'fixed';
-      iframe.style.right = '0';
-      iframe.style.bottom = '0';
-      iframe.style.width = '0';
-      iframe.style.height = '0';
-      iframe.style.border = '0';
-      iframe.style.visibility = 'hidden';
+      iframe.setAttribute(
+        'style',
+        'position: fixed; top: 0; left: 0; width: 100%; height: 100%; border: none; opacity: 0.001; pointer-events: none; z-index: -999999;'
+      );
       document.body.appendChild(iframe);
 
-      const contentHtml = typeof elementOrHtml === 'string' 
-        ? (elementOrHtml.startsWith('<') ? elementOrHtml : (document.getElementById(elementOrHtml)?.innerHTML || ''))
-        : elementOrHtml.innerHTML;
+      let contentHtml = '';
+      if (typeof elementOrHtml === 'string') {
+        const trimmed = elementOrHtml.trim();
+        if (trimmed.startsWith('<')) {
+          contentHtml = trimmed;
+        } else {
+          const el = document.getElementById(elementOrHtml);
+          if (el) {
+            contentHtml = el.innerHTML;
+          } else {
+            console.warn(`Element with ID "${elementOrHtml}" not found in DOM.`);
+            contentHtml = `<div style="padding: 20px; font-family: sans-serif;"><h3>Documento: ${title}</h3><p>Contenido no disponible para impresión directa.</p></div>`;
+          }
+        }
+      } else if (elementOrHtml && elementOrHtml.innerHTML) {
+        contentHtml = elementOrHtml.innerHTML;
+      }
 
       const iframeDoc = iframe.contentWindow?.document || iframe.contentDocument;
       if (!iframeDoc) {
@@ -97,27 +110,31 @@ export function printElement(
           <style>
             @page {
               size: auto;
-              margin: 10mm;
+              margin: 8mm;
             }
             * {
               box-sizing: border-box;
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
             }
-            body {
+            html, body {
+              background: #ffffff !important;
+              color: #0f172a !important;
               font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-              font-size: 11px;
-              color: #0f172a;
-              background: #ffffff;
-              margin: 0;
-              padding: 0;
+              margin: 0 !important;
+              padding: 0 !important;
+              width: 100% !important;
+              height: auto !important;
+              visibility: visible !important;
+              opacity: 1 !important;
+              display: block !important;
             }
             table {
               width: 100%;
               border-collapse: collapse;
             }
             th, td {
-              padding: 6px 8px;
+              padding: 5px 8px;
               text-align: left;
             }
             .text-center { text-align: center; }
@@ -130,11 +147,15 @@ export function printElement(
             .border-t { border-top: 1px solid #cbd5e1; }
             .border-r { border-right: 1px solid #cbd5e1; }
             .rounded { border-radius: 4px; }
+            .bg-slate-50 { background-color: #f8fafc !important; }
             .bg-slate-100 { background-color: #f1f5f9 !important; }
             .bg-amber-50 { background-color: #fffbeb !important; }
             .text-red-600 { color: #dc2626 !important; }
             .text-blue-900 { color: #1e3a8a !important; }
             .bg-blue-900 { background-color: #1e3a8a !important; color: #ffffff !important; }
+            .print\\:hidden, button {
+              display: none !important;
+            }
           </style>
         </head>
         <body>
@@ -147,17 +168,50 @@ export function printElement(
       iframeDoc.write(fullPrintHtml);
       iframeDoc.close();
 
-      setTimeout(() => {
+      const doPrint = () => {
         try {
           iframe.contentWindow?.focus();
           iframe.contentWindow?.print();
+          setTimeout(() => {
+            if (iframe.parentNode) {
+              iframe.parentNode.removeChild(iframe);
+            }
+          }, 4000);
           resolve(true);
         } catch (e) {
           console.error('Error during iframe printing:', e);
           window.print();
           resolve(false);
         }
-      }, 350);
+      };
+
+      // Wait for any images in the iframe to finish loading before triggering print preview
+      const images = Array.from(iframeDoc.images || []);
+      if (images.length === 0 || images.every(img => img.complete)) {
+        setTimeout(doPrint, 250);
+      } else {
+        let remaining = images.length;
+        const handleImageDone = () => {
+          remaining--;
+          if (remaining <= 0) {
+            setTimeout(doPrint, 150);
+          }
+        };
+        images.forEach(img => {
+          if (img.complete) {
+            remaining--;
+          } else {
+            img.onload = handleImageDone;
+            img.onerror = handleImageDone;
+          }
+        });
+        if (remaining <= 0) {
+          setTimeout(doPrint, 150);
+        } else {
+          // Safety timeout so print never hangs indefinitely
+          setTimeout(doPrint, 1200);
+        }
+      }
     } catch (err) {
       console.error('Print iframe init error:', err);
       window.print();
@@ -261,6 +315,63 @@ export function exportToPDF(
 
   const safeFileName = (fileName || title.replace(/[^a-zA-Z0-9_-]/g, '_')) + '.pdf';
   doc.save(safeFileName);
+}
+
+/**
+ * Direct printer layout for any tabular report or list across all ERP modules
+ */
+export function printTableReport(
+  title: string,
+  columns: string[],
+  rows: (string | number)[][],
+  docTitle?: string
+) {
+  const dateStr = new Date().toLocaleDateString('es-MX', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  const tableHtml = `
+    <div style="font-family: system-ui, sans-serif; padding: 20px; color: #0f172a; max-width: 1000px; margin: 0 auto;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #032b4e; padding-bottom: 12px; margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <img src="${MIAULOO_LOGO_BASE64 || MIAULOO_LOGO}" alt="Miauloo" style="height: 48px; width: auto; object-fit: contain;" />
+          <div>
+            <h1 style="margin: 0; font-size: 20px; font-weight: 900; color: #032b4e; text-transform: uppercase; letter-spacing: 0.5px;">MIAULOO ERP</h1>
+            <p style="margin: 2px 0 0 0; font-size: 11px; color: #64748b; font-weight: 700;">${title.toUpperCase()}</p>
+          </div>
+        </div>
+        <div style="text-align: right; font-size: 11px; color: #475569;">
+          <div><strong>Fecha de emisión:</strong> ${dateStr}</div>
+          <div><strong>Total de registros:</strong> ${rows.length}</div>
+        </div>
+      </div>
+
+      <table style="width: 100%; border-collapse: collapse; font-size: 10.5px; margin-bottom: 20px; border: 1px solid #cbd5e1;">
+        <thead>
+          <tr style="background: #032b4e; color: #ffffff;">
+            ${columns.map(c => `<th style="padding: 8px 10px; text-align: left; font-weight: bold; border-right: 1px solid #1e40af; font-size: 10px; text-transform: uppercase;">${c}</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map((row, idx) => `
+            <tr style="border-bottom: 1px solid #e2e8f0; background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+              ${row.map(cell => `<td style="padding: 7px 10px; border-right: 1px solid #e2e8f0;">${cell !== null && cell !== undefined ? String(cell) : ''}</td>`).join('')}
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+
+      <div style="border-top: 1px solid #cbd5e1; padding-top: 10px; text-align: center; font-size: 9.5px; color: #94a3b8;">
+        Documento Oficial emitido por Sistema ERP Miauloo • San Juan del Río, Qro. • Tel: 427 116 9640
+      </div>
+    </div>
+  `;
+
+  return printElement(tableHtml, docTitle || title);
 }
 
 // ============================================================================
@@ -452,7 +563,7 @@ export function printSaleNoteReceipt(note: SaleNote) {
       <!-- Header -->
       <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #1E3A8A; padding-bottom: 12px; margin-bottom: 14px;">
         <div style="display: flex; align-items: center; gap: 12px;">
-          <img src="${MIAULOO_LOGO}" alt="Miauloo" style="height: 48px; width: auto; object-fit: contain;" onerror="this.style.display='none'" />
+          <img src="${MIAULOO_LOGO_BASE64 || MIAULOO_LOGO}" alt="Miauloo" style="height: 48px; width: auto; object-fit: contain;" onerror="this.style.display='none'" />
           <div>
             <h1 style="font-size: 24px; font-weight: 900; letter-spacing: 1px; color: #1E3A8A; margin: 0; font-family: serif; text-transform: uppercase;">
               MIAULOO
@@ -686,3 +797,132 @@ export function exportTransferSheetToPDF(sheet: TransferSheet) {
 
   doc.save(`Hoja_Traslado_${sheet.folio.replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`);
 }
+
+export function printTransferSheetReceipt(sheet: TransferSheet) {
+  const htmlContent = `
+    <div style="max-width: 820px; margin: 0 auto; padding: 20px; font-family: system-ui, -apple-system, sans-serif; color: #0f172a;">
+      <div style="background: #0B2545; color: white; font-weight: 900; text-align: center; padding: 8px; font-size: 15px; letter-spacing: 1px; text-transform: uppercase; border-radius: 4px 4px 0 0;">
+        HOJA DE TRASLADO DE PRODUCTOS
+      </div>
+
+      <div style="display: flex; border: 1px solid #0B2545; border-top: none; font-size: 11px;">
+        <div style="width: 35%; padding: 12px; border-right: 1px solid #0B2545; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; background: #f8fafc;">
+          <img src="${MIAULOO_LOGO_BASE64 || MIAULOO_LOGO}" alt="Miauloo" style="height: 48px; width: auto; object-fit: contain; margin-bottom: 6px;" />
+          <div style="font-weight: 800; font-size: 9px; text-transform: uppercase; color: #0B2545; line-height: 1.2;">
+            SOLUCIONES INTEGRALES DE ABASTO, LIMPIEZA Y RECOLECCION
+          </div>
+        </div>
+
+        <div style="width: 65%; font-size: 10px;">
+          <div style="display: flex; border-bottom: 1px solid #0B2545;">
+            <div style="width: 50%; padding: 5px 8px; border-right: 1px solid #0B2545;"><strong>RFC:</strong> ${sheet.rfc || 'BAMN8611098PA'}</div>
+            <div style="width: 50%; padding: 5px 8px;"><strong>E-MAIL:</strong> miauloosolucionesintegrales@gmail.com</div>
+          </div>
+          <div style="padding: 5px 8px; border-bottom: 1px solid #0B2545;">
+            <strong>MOVIL:</strong> ${sheet.phone || '(52) 427 116 9640'}
+          </div>
+          <div style="padding: 5px 8px; border-bottom: 1px solid #0B2545;">
+            <strong>Expedido en:</strong> Sta. Cruz 71, La Loma, 76804 San Juan del Río, Qro.
+          </div>
+          <div style="display: flex; border-bottom: 1px solid #0B2545;">
+            <div style="width: 50%; padding: 5px 8px; border-right: 1px solid #0B2545;"><strong>Fecha:</strong> ${sheet.date}</div>
+            <div style="width: 50%; padding: 5px 8px; font-weight: bold; color: #1e3a8a; background: #eff6ff;"><strong>Folio:</strong> ${sheet.folio}</div>
+          </div>
+          <div style="display: flex;">
+            <div style="width: 50%; padding: 5px 8px; border-right: 1px solid #0B2545;"><strong>Lugar:</strong> ${sheet.expeditedIn || 'San Juan del Rio, Qro.'}</div>
+            <div style="width: 50%; padding: 5px 8px;"><strong>Elaborado por:</strong> ${sheet.elaboratedBy || 'Areli Antonia Mireles Cruz'}</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #0B2545; border-top: none; padding: 10px; font-size: 10.5px; background: #ffffff;">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+          <div><strong>Cliente:</strong> <span style="text-transform: uppercase; font-weight: bold;">${sheet.clientName}</span></div>
+          <div><strong>Destino:</strong> <span style="text-transform: uppercase;">${sheet.destination || 'Entrega a domicilio'}</span></div>
+        </div>
+        <div style="display: flex; gap: 16px; border-top: 1px solid #e2e8f0; padding-top: 4px; margin-bottom: 4px;">
+          <div><strong>Dirección:</strong> ${sheet.address || 'N/A'}</div>
+          <div><strong>C.P.:</strong> ${sheet.cp || 'N/A'}</div>
+          <div><strong>Colonia:</strong> ${sheet.colonia || 'N/A'}</div>
+        </div>
+        <div style="display: flex; gap: 16px; border-top: 1px solid #e2e8f0; padding-top: 4px; margin-bottom: 4px;">
+          <div><strong>Régimen Fiscal:</strong> ${sheet.fiscalRegimen || 'General de Ley Personas Morales'}</div>
+          <div><strong>Tel:</strong> ${sheet.phone || 'N/A'}</div>
+        </div>
+        <div style="display: flex; gap: 16px; border-top: 1px solid #e2e8f0; padding-top: 4px; margin-bottom: 4px;">
+          <div><strong>No. Cliente:</strong> ${sheet.clientNo || 'CL-001'}</div>
+          <div><strong>RFC:</strong> ${sheet.rfc || 'XAXX010101000'}</div>
+          <div><strong>CURP:</strong> ${sheet.curp || 'N/A'}</div>
+        </div>
+        <div style="border-top: 1px solid #e2e8f0; padding-top: 4px; margin-bottom: 4px;">
+          <strong>Forma de Pago:</strong> ${sheet.paymentForm || 'Transferencia Electrónica'}
+        </div>
+        <div style="display: flex; gap: 20px; border-top: 1px solid #e2e8f0; padding-top: 4px; background: #f8fafc; padding: 4px 6px;">
+          <div><strong>Operador:</strong> ${sheet.operator || 'No asignado'}</div>
+          <div><strong>No. de Placas:</strong> ${sheet.plateNo || 'S/P'}</div>
+        </div>
+      </div>
+
+      <table style="width: 100%; border-collapse: collapse; margin-top: 10px; border: 1px solid #0B2545; font-size: 10.5px;">
+        <thead>
+          <tr style="background: #0B2545; color: white; text-transform: uppercase; font-size: 9.5px;">
+            <th style="padding: 7px; text-align: center; width: 65px; border-right: 1px solid #1e3a8a;">Cantidad</th>
+            <th style="padding: 7px; text-align: center; width: 65px; border-right: 1px solid #1e3a8a;">Unidad</th>
+            <th style="padding: 7px; text-align: left; border-right: 1px solid #1e3a8a;">Descripción</th>
+            <th style="padding: 7px; text-align: right; width: 90px; border-right: 1px solid #1e3a8a;">P/U</th>
+            <th style="padding: 7px; text-align: right; width: 100px;">Importe</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${sheet.items.map((it, idx) => `
+            <tr style="border-bottom: 1px solid #cbd5e1; background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+              <td style="padding: 6px; text-align: center; border-right: 1px solid #cbd5e1; font-weight: 600;">${it.quantity}</td>
+              <td style="padding: 6px; text-align: center; border-right: 1px solid #cbd5e1; text-transform: uppercase;">${it.unit}</td>
+              <td style="padding: 6px; border-right: 1px solid #cbd5e1; font-weight: 700; text-transform: uppercase;">${it.description}</td>
+              <td style="padding: 6px; text-align: right; border-right: 1px solid #cbd5e1;">$${Number(it.unitPrice || 0).toFixed(2)}</td>
+              <td style="padding: 6px; text-align: right; font-weight: 900;">$${Number(it.total || 0).toFixed(2)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+
+      <div style="display: flex; justify-content: flex-end; margin-top: 10px;">
+        <div style="width: 250px; border: 1px solid #0B2545; font-size: 11px;">
+          <div style="display: flex; justify-content: space-between; padding: 5px 10px; border-bottom: 1px solid #cbd5e1;">
+            <strong>SUBTOTAL:</strong>
+            <span>$${Number(sheet.subtotal || 0).toFixed(2)}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 5px 10px; border-bottom: 1px solid #cbd5e1; color: #64748b;">
+            <span>I.V.A (0%):</span>
+            <span>$0.00</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 7px 10px; background: #0B2545; color: white; font-weight: 900; font-size: 13px;">
+            <span>TOTAL:</span>
+            <span>$${Number(sheet.total || 0).toFixed(2)}</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #0B2545; padding: 10px; margin-top: 12px; font-size: 9.5px; background: #f8fafc;">
+        <p style="margin: 0 0 6px 0; line-height: 1.3;">
+          <strong style="color: #b91c1c;">NOTA:</strong> Al momento de la entrega de su pedido, por favor revise que este sea correcto en cuanto a cantidad y producto de acuerdo a lo solicitado. En caso de que todo esté conforme, por favor agregue la siguiente leyenda: <strong>"Recibí mi pedido completo"</strong>, su nombre, firma y fecha.
+        </p>
+        ${sheet.notes ? `<div style="border-top: 1px solid #e2e8f0; padding-top: 4px; margin-top: 4px;"><strong>Observaciones:</strong> ${sheet.notes}</div>` : ''}
+
+        <div style="margin-top: 35px; display: flex; justify-content: center; text-align: center;">
+          <div style="width: 240px; border-top: 2px solid #0f172a; padding-top: 4px;">
+            <div style="font-weight: bold; text-transform: uppercase;">${sheet.clientName}</div>
+            <div style="color: #64748b; font-size: 9px;">Acepto de Conformidad (Firma)</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top: 10px; text-align: center; font-size: 9px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 6px;">
+        MIAULOO • Soluciones Integrales de Abasto • San Juan del Río, Qro. • Tel: 427 116 9640
+      </div>
+    </div>
+  `;
+
+  return printElement(htmlContent, `Hoja_Traslado_${sheet.folio}`);
+}
+

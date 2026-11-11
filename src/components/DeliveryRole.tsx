@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { MockDatabase } from '../data';
 import { DeliveryRoute, Sale, User } from '../types';
-import { exportToExcel, exportToPDF } from '../utils/exportUtils';
+import { exportToExcel, exportToPDF, printTableReport } from '../utils/exportUtils';
 
 interface DeliveryRoleProps {
   onBack: () => void;
@@ -266,9 +266,17 @@ export default function DeliveryRole({ onBack, currentUser }: DeliveryRoleProps)
                   </button>
                   <button
                     onClick={() => exportToPDF('Hoja de Ruta de Distribución y Entregas', ['Folio', 'Cliente', 'Dirección', 'Teléfono', 'Monto ($)', 'Estatus'], routes.map(r => [r.id, r.clientName, r.address, r.phone, `$${r.totalAmount.toFixed(2)}`, r.status.toUpperCase()]))}
-                    className="bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold px-2.5 py-1 rounded flex items-center gap-1 shadow-sm"
+                    className="bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold px-2.5 py-1 rounded flex items-center gap-1 shadow-sm cursor-pointer"
+                    title="Descargar ruta en PDF"
                   >
-                    <Printer className="w-3 h-3" /> PDF
+                    <Download className="w-3 h-3" /> PDF
+                  </button>
+                  <button
+                    onClick={() => printTableReport('Hoja de Ruta de Distribución y Entregas', ['Folio', 'Cliente', 'Dirección', 'Teléfono', 'Monto ($)', 'Estatus'], routes.map(r => [r.id, r.clientName, r.address, r.phone, `$${r.totalAmount.toFixed(2)}`, r.status.toUpperCase()]))}
+                    className="bg-blue-800 hover:bg-blue-900 text-white text-[10px] font-bold px-2.5 py-1 rounded flex items-center gap-1 shadow-sm cursor-pointer"
+                    title="Mandar hoja de ruta a la impresora"
+                  >
+                    <Printer className="w-3 h-3" /> Imprimir
                   </button>
                 </div>
               </div>

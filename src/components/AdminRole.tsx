@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { MockDatabase } from '../data';
 import { RawMaterial, Client, Sale, AuditLog, User, SystemConfig, RoleType } from '../types';
-import { exportToExcel, exportToPDF } from '../utils/exportUtils';
+import { exportToExcel, exportToPDF, printTableReport } from '../utils/exportUtils';
 import { SupabaseModal } from './SupabaseModal';
 import { SUPABASE_PROJECT_INFO, SUPABASE_URL, supabase } from '../lib/supabase';
 import { updateUserRoleInSupabase, fetchUsersFromSupabase } from '../services/supabaseService';
@@ -854,9 +854,17 @@ export default function AdminRole({ onBack, currentUser, activeTab: propsActiveT
                   </button>
                   <button
                     onClick={() => exportToPDF('Bitácora de Auditoría de Seguridad ERP Miauloo', ['Fecha', 'Usuario', 'Módulo', 'Acción', 'Detalles'], auditLogs.map(log => [new Date(log.timestamp).toLocaleString('es-MX'), log.user, log.module, log.action, log.details]))}
-                    className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-all"
+                    className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                    title="Descargar Auditoría en PDF"
                   >
-                    <Printer className="w-3.5 h-3.5" /> PDF
+                    <Download className="w-3.5 h-3.5" /> PDF
+                  </button>
+                  <button
+                    onClick={() => printTableReport('Bitácora de Auditoría de Seguridad ERP Miauloo', ['Fecha', 'Usuario', 'Módulo', 'Acción', 'Detalles'], auditLogs.map(log => [new Date(log.timestamp).toLocaleString('es-MX'), log.user, log.module, log.action, log.details]))}
+                    className="bg-blue-800 hover:bg-blue-900 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                    title="Mandar Auditoría a la impresora"
+                  >
+                    <Printer className="w-3.5 h-3.5" /> Imprimir
                   </button>
                 </div>
               </div>

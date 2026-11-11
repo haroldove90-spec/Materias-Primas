@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { 
   Users, UserPlus, Search, Filter, Phone, Mail, MapPin, 
   CreditCard, Edit, Trash2, CheckCircle2, XCircle, 
-  FileText, Download, RefreshCw, AlertCircle, Building, Check, X, MessageSquare, DollarSign, Wallet, Eye
+  FileText, Download, Printer, RefreshCw, AlertCircle, Building, Check, X, MessageSquare, DollarSign, Wallet, Eye
 } from 'lucide-react';
 import { Client, User } from '../types';
 import { MockDatabase } from '../data';
-import { exportToExcel, exportToPDF } from '../utils/exportUtils';
+import { exportToExcel, exportToPDF, printTableReport } from '../utils/exportUtils';
 import { 
   fetchClientsFromSupabase, 
   saveClientToSupabase, 
@@ -279,6 +279,18 @@ Estamos a sus órdenes. ✨`;
     exportToPDF('Catálogo y Cartera de Clientes - Miauloo ERP', headers, rows, `Clientes_Miauloo_${new Date().toISOString().slice(0, 10)}`);
   };
 
+  const handlePrintReport = () => {
+    const headers = ['Nombre', 'Teléfono / WhatsApp', 'Lista Precios', 'Crédito ($)', 'Saldo Pendiente ($)'];
+    const rows = filteredClients.map(c => [
+      c.name,
+      `${c.phone || '-'} / ${c.whatsapp || '-'}`,
+      c.priceList,
+      `$${c.creditLimit.toLocaleString()}`,
+      `$${c.currentDebt.toLocaleString()}`
+    ]);
+    printTableReport('Catálogo y Cartera de Clientes - Miauloo ERP', headers, rows, `Clientes_Miauloo_${new Date().toISOString().slice(0, 10)}`);
+  };
+
   // Filter Clients
   const filteredClients = clients.filter(c => {
     const matchesSearch = 
@@ -344,11 +356,20 @@ Estamos a sus órdenes. ✨`;
 
           <button
             onClick={handleExportPDF}
-            className="px-3.5 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold flex items-center gap-2 transition-colors"
+            className="px-3.5 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer"
             title="Exportar a PDF"
           >
             <FileText className="w-3.5 h-3.5 text-rose-600" />
             <span>PDF</span>
+          </button>
+
+          <button
+            onClick={handlePrintReport}
+            className="px-3.5 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer"
+            title="Mandar a la Impresora"
+          >
+            <Printer className="w-3.5 h-3.5 text-blue-600" />
+            <span>Imprimir</span>
           </button>
 
           <button

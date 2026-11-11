@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { MockDatabase } from '../data';
 import { RawMaterial, Client, Sale, OrderItem, DeliveryRoute, User, TransferSheet, TransferSheetItem, SaleNote, SaleNoteItem, AccountReceivable } from '../types';
-import { exportToExcel, exportToPDF, exportSaleNoteToPDF, printSaleNoteReceipt, exportTransferSheetToPDF, printElement } from '../utils/exportUtils';
+import { exportToExcel, exportToPDF, exportSaleNoteToPDF, printSaleNoteReceipt, exportTransferSheetToPDF, printTransferSheetReceipt, printElement } from '../utils/exportUtils';
 import { recordSaveTelemetry } from '../services/supabaseTelemetry';
 import { 
   saveRawMaterialToSupabase, 
@@ -2076,7 +2076,7 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
                   <Download className="w-3.5 h-3.5 mr-1.5" /> Descargar PDF
                 </button>
                 <button
-                  onClick={() => printElement('printable-transfer-sheet', `Hoja_Traslado_${selectedTransferSheet.folio}`)}
+                  onClick={() => printTransferSheetReceipt(selectedTransferSheet)}
                   className="bg-[#0B2545] hover:bg-[#133966] text-white px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center transition-all shadow cursor-pointer"
                   title="Mandar a imprimir directamente a la impresora"
                 >

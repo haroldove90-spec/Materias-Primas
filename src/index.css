@@ -35,7 +35,7 @@
   }
 
   /* Unconstrain print areas from scrollbars or fixed wrappers */
-  #printable-sale-note, #printable-transfer-sheet, .printable-doc {
+  #printable-sale-note, #printable-transfer-sheet, #printable-label, .printable-doc {
     position: static !important;
     overflow: visible !important;
     width: 100% !important;

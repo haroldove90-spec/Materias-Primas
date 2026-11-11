@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { MockDatabase } from '../data';
 import { RawMaterial, StockMovement, User, PurchaseOrder, Supplier } from '../types';
-import { exportToExcel, exportToPDF } from '../utils/exportUtils';
+import { exportToExcel, exportToPDF, printElement } from '../utils/exportUtils';
 import { 
   saveRawMaterialToSupabase, 
   deleteRawMaterialInSupabase,
@@ -970,8 +970,8 @@ export default function WarehouseRole({ onBack, currentUser, activeTab: propsAct
                         <p className="text-xs text-slate-500">Etiqueta con requerimientos regulatorios de trazabilidad química.</p>
                       </div>
                       <button
-                        onClick={() => window.print()}
-                        className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center shadow-sm transition-all"
+                        onClick={() => printElement('printable-label', `Etiqueta_${targetMat.sku || targetMat.id}`)}
+                        className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center shadow-sm transition-all cursor-pointer"
                       >
                         <Printer className="w-4 h-4 mr-1.5" /> Imprimir Etiqueta
                       </button>
