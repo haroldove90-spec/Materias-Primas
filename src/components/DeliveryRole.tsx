@@ -5,7 +5,8 @@ import {
 } from 'lucide-react';
 import { MockDatabase } from '../data';
 import { DeliveryRoute, Sale, User } from '../types';
-import { exportToExcel, exportToPDF, printTableReport } from '../utils/exportUtils';
+import { exportToExcel, exportToPDF, printTableReport, printElement, MIAULOO_LOGO } from '../utils/exportUtils';
+import { MIAULOO_LOGO_BASE64 } from '../utils/miaulooLogoBase64';
 
 interface DeliveryRoleProps {
   onBack: () => void;
@@ -198,6 +199,145 @@ export default function DeliveryRole({ onBack, currentUser }: DeliveryRoleProps)
   const selectedSale = selectedRoute ? sales.find(s => s.id === selectedRoute.saleId) : null;
   const isPaymentPending = selectedSale?.paymentType === 'Contado' && selectedSale.amountPaid === 0;
 
+  // Sanitizar datos de rutas de forma 100% segura para exportar e imprimir
+  const getRouteRowData = () => {
+    return routes.map(r => {
+      const sale = sales.find(s => s.id === r.saleId);
+      const amount = Number(sale?.total ?? r.paymentCollected ?? 0);
+      const phone = r.phone || sale?.phone || 'Sin registrar';
+      const statusLabel = r.status === 'entregado' ? 'ENTREGADO' : r.status === 'en_ruta' ? 'EN RUTA' : 'PENDIENTE';
+      return {
+        folio: r.id,
+        client: r.clientName || 'Cliente',
+        address: r.address || 'Sin dirección',
+        phone,
+        amountFormatted: `$${amount.toFixed(2)}`,
+        rawAmount: amount,
+        status: statusLabel,
+        items: r.itemsSummary || (sale?.items ? sale.items.map(it => `${it.quantity} ${it.unit} ${it.productName}`).join(', ') : '-')
+      };
+    });
+  };
+
+  const handleExportExcel = () => {
+    const data = getRouteRowData().map(d => ({
+      'Folio': d.folio,
+      'Cliente': d.client,
+      'Dirección': d.address,
+      'Teléfono': d.phone,
+      'Mercancía': d.items,
+      'Monto ($ MXN)': d.rawAmount,
+      'Estatus': d.status
+    }));
+    exportToExcel(data, `Ruta_Distribucion_Miauloo_${new Date().toISOString().slice(0, 10)}`);
+  };
+
+  const handleExportPDF = () => {
+    const headers = ['Folio', 'Cliente', 'Dirección', 'Teléfono', 'Monto ($)', 'Estatus'];
+    const rows = getRouteRowData().map(d => [
+      d.folio,
+      d.client,
+      d.address,
+      d.phone,
+      d.amountFormatted,
+      d.status
+    ]);
+    exportToPDF('Hoja de Ruta de Distribución y Entregas - Miauloo', headers, rows, `Ruta_Distribucion_${new Date().toISOString().slice(0, 10)}`);
+  };
+
+  const handlePrintReport = () => {
+    const headers = ['Folio', 'Cliente', 'Dirección', 'Teléfono', 'Monto ($)', 'Estatus'];
+    const rows = getRouteRowData().map(d => [
+      d.folio,
+      d.client,
+      d.address,
+      d.phone,
+      d.amountFormatted,
+      d.status
+    ]);
+    printTableReport('Hoja de Ruta de Distribución y Entregas - Miauloo', headers, rows, `Ruta_Distribucion_${new Date().toISOString().slice(0, 10)}`);
+  };
+
+  const handlePrintDeliveryReceipt = (route: DeliveryRoute) => {
+    const sale = sales.find(s => s.id === route.saleId);
+    const amount = Number(sale?.total ?? route.paymentCollected ?? 0);
+    const items = sale?.items || [];
+
+    const html = `
+      <div style="font-family: system-ui, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; color: #0f172a;">
+        <div style="border-bottom: 2px solid #032b4e; padding-bottom: 12px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <img src="${MIAULOO_LOGO_BASE64 || MIAULOO_LOGO}" alt="Miauloo" style="height: 42px; width: auto; object-fit: contain;" />
+            <div>
+              <h2 style="margin: 0; color: #032b4e; font-size: 18px; font-weight: 900; letter-spacing: 0.5px;">MIAULOO</h2>
+              <p style="margin: 2px 0 0 0; font-size: 10px; color: #64748b; font-weight: 600;">Comprobante Oficial de Entrega</p>
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-weight: 900; font-size: 13px; color: #dc2626;">FOLIO: ${route.id}</div>
+            <div style="font-size: 10px; color: #64748b; margin-top: 2px;">Fecha: ${new Date().toLocaleDateString('es-MX')}</div>
+          </div>
+        </div>
+
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px 14px; border-radius: 6px; margin-bottom: 14px; font-size: 11px;">
+          <div><strong>Cliente:</strong> <span style="text-transform: uppercase; font-weight: bold;">${route.clientName}</span></div>
+          <div style="margin-top: 3px;"><strong>Dirección:</strong> ${route.address}</div>
+          <div style="margin-top: 3px;"><strong>Conductor:</strong> ${currentUser?.name || 'Harold Anguiano Morales'}</div>
+          ${route.phone ? `<div style="margin-top: 3px;"><strong>Teléfono:</strong> ${route.phone}</div>` : ''}
+        </div>
+
+        <div style="margin-bottom: 14px;">
+          <h4 style="font-size: 11px; margin: 0 0 6px 0; color: #032b4e; text-transform: uppercase;">Detalle de Mercancía:</h4>
+          ${items.length > 0 ? `
+            <table style="width: 100%; border-collapse: collapse; font-size: 10px; border: 1px solid #032b4e;">
+              <thead>
+                <tr style="background: #032b4e; color: white;">
+                  <th style="padding: 6px; text-align: center; width: 60px;">Cant.</th>
+                  <th style="padding: 6px; text-align: left;">Descripción</th>
+                  <th style="padding: 6px; text-align: right; width: 80px;">Importe</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${items.map((it, idx) => `
+                  <tr style="border-bottom: 1px solid #e2e8f0; background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+                    <td style="padding: 5px; text-align: center;">${it.quantity} ${it.unit}</td>
+                    <td style="padding: 5px; font-weight: 600;">${it.productName}</td>
+                    <td style="padding: 5px; text-align: right;">$${Number(it.total || 0).toFixed(2)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          ` : `
+            <div style="padding: 8px 12px; background: #f1f5f9; border-radius: 4px; font-size: 11px; font-weight: 600;">
+              ${route.itemsSummary}
+            </div>
+          `}
+        </div>
+
+        <div style="text-align: right; font-size: 14px; font-weight: 900; color: #032b4e; margin-bottom: 25px;">
+          TOTAL: $${amount.toFixed(2)} MXN
+        </div>
+
+        <div style="display: flex; justify-content: space-around; margin-top: 40px; margin-bottom: 20px; text-align: center; font-size: 9px; color: #64748b;">
+          <div>
+            <div style="width: 160px; border-bottom: 1px solid #94a3b8; margin-bottom: 4px;"></div>
+            <span>RECIBÍ DE CONFORMIDAD</span>
+          </div>
+          <div>
+            <div style="width: 160px; border-bottom: 1px solid #94a3b8; margin-bottom: 4px;"></div>
+            <span>ENTREGADO POR (${currentUser?.name || 'MIAULOO'})</span>
+          </div>
+        </div>
+
+        <div style="border-top: 1px solid #cbd5e1; padding-top: 8px; text-align: center; font-size: 9px; color: #94a3b8;">
+          MIAULOO • Soluciones Integrales de Abasto • Tel: 427 116 9640 • San Juan del Río, Qro.
+        </div>
+      </div>
+    `;
+
+    printElement(html, `Comprobante_Entrega_${route.id}`);
+  };
+
   const MIAULOO_LOGO = 'https://mwtzisudncwrlsizmgap.supabase.co/storage/v1/object/public/logo/miauloo.png';
 
   return (
@@ -259,20 +399,21 @@ export default function DeliveryRole({ onBack, currentUser }: DeliveryRoleProps)
                 <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Ruta Asignada</h4>
                 <div className="flex items-center space-x-2">
                   <button
-                    onClick={() => exportToExcel(routes.map(r => ({ Folio: r.id, Cliente: r.clientName, Dirección: r.address, Teléfono: r.phone, Total: r.totalAmount, Estatus: r.status })), 'Ruta_Distribucion_Miauloo')}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold px-2.5 py-1 rounded flex items-center gap-1 shadow-sm"
+                    onClick={handleExportExcel}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold px-2.5 py-1 rounded flex items-center gap-1 shadow-sm cursor-pointer"
+                    title="Exportar hoja de ruta a Excel"
                   >
                     <Download className="w-3 h-3" /> Excel
                   </button>
                   <button
-                    onClick={() => exportToPDF('Hoja de Ruta de Distribución y Entregas', ['Folio', 'Cliente', 'Dirección', 'Teléfono', 'Monto ($)', 'Estatus'], routes.map(r => [r.id, r.clientName, r.address, r.phone, `$${r.totalAmount.toFixed(2)}`, r.status.toUpperCase()]))}
+                    onClick={handleExportPDF}
                     className="bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold px-2.5 py-1 rounded flex items-center gap-1 shadow-sm cursor-pointer"
-                    title="Descargar ruta en PDF"
+                    title="Descargar hoja de ruta en PDF"
                   >
                     <Download className="w-3 h-3" /> PDF
                   </button>
                   <button
-                    onClick={() => printTableReport('Hoja de Ruta de Distribución y Entregas', ['Folio', 'Cliente', 'Dirección', 'Teléfono', 'Monto ($)', 'Estatus'], routes.map(r => [r.id, r.clientName, r.address, r.phone, `$${r.totalAmount.toFixed(2)}`, r.status.toUpperCase()]))}
+                    onClick={handlePrintReport}
                     className="bg-blue-800 hover:bg-blue-900 text-white text-[10px] font-bold px-2.5 py-1 rounded flex items-center gap-1 shadow-sm cursor-pointer"
                     title="Mandar hoja de ruta a la impresora"
                   >
@@ -352,9 +493,16 @@ export default function DeliveryRole({ onBack, currentUser }: DeliveryRoleProps)
                 </p>
                 <button
                   onClick={() => alert(`Simulando redireccionamiento a Google Maps para la dirección: ${selectedRoute?.address}`)}
-                  className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs py-2 rounded flex items-center justify-center border border-slate-700 mt-1"
+                  className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs py-2 rounded flex items-center justify-center border border-slate-700 mt-1 cursor-pointer"
                 >
                   <Navigation className="w-4 h-4 mr-1 text-amber-400" /> Iniciar Navegación GPS
+                </button>
+                <button
+                  onClick={() => selectedRoute && handlePrintDeliveryReceipt(selectedRoute)}
+                  className="w-full bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs py-2 rounded flex items-center justify-center border border-blue-700 mt-2 cursor-pointer shadow-sm"
+                  title="Imprimir comprobante para el cliente"
+                >
+                  <Printer className="w-4 h-4 mr-1.5" /> Imprimir Comprobante de Entrega
                 </button>
               </div>
 
