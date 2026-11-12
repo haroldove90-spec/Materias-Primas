@@ -7,6 +7,7 @@ import { SaleNote, TransferSheet } from '../types';
 import { MIAULOO_LOGO_BASE64 } from './miaulooLogoBase64';
 
 export const MIAULOO_LOGO = 'https://mwtzisudncwrlsizmgap.supabase.co/storage/v1/object/public/logo/miauloo.png';
+export const MIAULOO_ADDRESS = 'CHABACANO 45, PUEBLO QUIETO 76810 SAN JUAN DEL RIO QUERETARO';
 
 // ============================================================================
 // 1. EXPORT TO EXCEL (CSV with UTF-8 BOM)
@@ -306,7 +307,7 @@ export function exportToPDF(
     doc.setFontSize(8);
     doc.setTextColor(148, 163, 184);
     doc.text(
-      `Página ${i} de ${totalPages} • Documento Oficial Sistema ERP Miauloo`,
+      `Página ${i} de ${totalPages} • Miauloo ERP • ${MIAULOO_ADDRESS}`,
       pageWidth / 2,
       doc.internal.pageSize.getHeight() - 8,
       { align: 'center' }
@@ -366,7 +367,7 @@ export function printTableReport(
       </table>
 
       <div style="border-top: 1px solid #cbd5e1; padding-top: 10px; text-align: center; font-size: 9.5px; color: #94a3b8;">
-        Documento Oficial emitido por Sistema ERP Miauloo • San Juan del Río, Qro. • Tel: 427 116 9640
+        Documento Oficial emitido por Sistema ERP Miauloo • ${MIAULOO_ADDRESS} • Tel: 427 116 9640
       </div>
     </div>
   `;
@@ -549,9 +550,9 @@ export function exportSaleNoteToPDF(note: SaleNote) {
   doc.setDrawColor(203, 213, 225);
   doc.line(14, footerY - 4, pageWidth - 14, footerY - 4);
 
-  doc.setFontSize(7.5);
+  doc.setFontSize(7);
   doc.setTextColor(100, 116, 139);
-  doc.text('MIAULOO - Soluciones Integrales de Abasto • Tel: 427 116 9640 • San Juan del Río, Qro.', pageWidth / 2, footerY, { align: 'center' });
+  doc.text(`MIAULOO • ${MIAULOO_ADDRESS} • Tel: 427 116 9640`, pageWidth / 2, footerY, { align: 'center' });
 
   const fileName = `Nota_Venta_${note.noteNo.replace(/\s+/g, '_')}.pdf`;
   doc.save(fileName);
@@ -667,7 +668,7 @@ export function printSaleNoteReceipt(note: SaleNote) {
 
       <!-- Footer -->
       <div style="border-top: 1px solid #cbd5e1; padding-top: 10px; text-align: center; font-size: 9px; color: #64748b;">
-        MIAULOO • Soluciones Integrales de Abasto • Tel: 427 116 9640 • San Juan del Río, Qro.
+        MIAULOO • Soluciones Integrales de Abasto • ${MIAULOO_ADDRESS} • Tel: 427 116 9640
       </div>
     </div>
   `;
@@ -723,43 +724,50 @@ export function exportTransferSheetToPDF(sheet: TransferSheet) {
   // Metadata Card
   doc.setFillColor(248, 250, 252);
   doc.setDrawColor(203, 213, 225);
-  doc.rect(14, 26, pageWidth - 28, 30, 'FD');
+  doc.rect(14, 26, pageWidth - 28, 33, 'FD');
 
   doc.setFontSize(8.5);
   doc.setTextColor(71, 85, 105);
   doc.setFont('helvetica', 'bold');
-  doc.text('CLIENTE DESTINO:', 18, 32);
+  doc.text('EXPEDIDO EN:', 18, 31.5);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(15, 23, 42);
-  doc.text(sheet.clientName, 48, 32);
+  doc.text(MIAULOO_ADDRESS, 43, 31.5);
 
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(71, 85, 105);
-  doc.text('FECHA:', pageWidth - 70, 32);
+  doc.text('CLIENTE DESTINO:', 18, 38);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(15, 23, 42);
-  doc.text(sheet.date, pageWidth - 54, 32);
+  doc.text(sheet.clientName, 48, 38);
 
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(71, 85, 105);
-  doc.text('DESTINO:', 18, 39);
+  doc.text('FECHA:', pageWidth - 70, 38);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(15, 23, 42);
-  doc.text(sheet.destination || 'Entrega a domicilio', 35, 39);
+  doc.text(sheet.date, pageWidth - 54, 38);
 
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(71, 85, 105);
-  doc.text('OPERADOR:', 18, 46);
+  doc.text('DESTINO:', 18, 44.5);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(15, 23, 42);
-  doc.text(sheet.operator || 'No asignado', 38, 46);
+  doc.text(sheet.destination || 'Entrega a domicilio', 35, 44.5);
 
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(71, 85, 105);
-  doc.text('PLACAS:', pageWidth - 70, 46);
+  doc.text('OPERADOR:', 18, 51);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(15, 23, 42);
-  doc.text(sheet.plateNo || 'S/P', pageWidth - 54, 46);
+  doc.text(sheet.operator || 'No asignado', 38, 51);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(71, 85, 105);
+  doc.text('PLACAS:', pageWidth - 70, 51);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(15, 23, 42);
+  doc.text(sheet.plateNo || 'S/P', pageWidth - 54, 51);
 
   // Items table
   const tableData = sheet.items.map(it => [
@@ -795,6 +803,12 @@ export function exportTransferSheetToPDF(sheet: TransferSheet) {
   doc.setTextColor(11, 37, 69);
   doc.text(`TOTAL TRASLADO: $${Number(sheet.total || 0).toFixed(2)}`, pageWidth - 16, finalY + 10, { align: 'right' });
 
+  const footerY = doc.internal.pageSize.getHeight() - 10;
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(100, 116, 139);
+  doc.text(`MIAULOO • ${MIAULOO_ADDRESS} • Tel: 427 116 9640`, pageWidth / 2, footerY, { align: 'center' });
+
   doc.save(`Hoja_Traslado_${sheet.folio.replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`);
 }
 
@@ -822,7 +836,7 @@ export function printTransferSheetReceipt(sheet: TransferSheet) {
             <strong>MOVIL:</strong> ${sheet.phone || '(52) 427 116 9640'}
           </div>
           <div style="padding: 5px 8px; border-bottom: 1px solid #0B2545;">
-            <strong>Expedido en:</strong> Sta. Cruz 71, La Loma, 76804 San Juan del Río, Qro.
+            <strong>Expedido en:</strong> ${MIAULOO_ADDRESS}
           </div>
           <div style="display: flex; border-bottom: 1px solid #0B2545;">
             <div style="width: 50%; padding: 5px 8px; border-right: 1px solid #0B2545;"><strong>Fecha:</strong> ${sheet.date}</div>
@@ -918,7 +932,7 @@ export function printTransferSheetReceipt(sheet: TransferSheet) {
       </div>
 
       <div style="margin-top: 10px; text-align: center; font-size: 9px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 6px;">
-        MIAULOO • Soluciones Integrales de Abasto • San Juan del Río, Qro. • Tel: 427 116 9640
+        MIAULOO • Soluciones Integrales de Abasto • ${MIAULOO_ADDRESS} • Tel: 427 116 9640
       </div>
     </div>
   `;

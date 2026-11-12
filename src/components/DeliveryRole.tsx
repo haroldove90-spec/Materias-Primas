@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { MockDatabase } from '../data';
 import { DeliveryRoute, Sale, User } from '../types';
-import { exportToExcel, exportToPDF, printTableReport, printElement, MIAULOO_LOGO } from '../utils/exportUtils';
+import { exportToExcel, exportToPDF, printTableReport, printElement, MIAULOO_LOGO, MIAULOO_ADDRESS } from '../utils/exportUtils';
 import { MIAULOO_LOGO_BASE64 } from '../utils/miaulooLogoBase64';
 
 interface DeliveryRoleProps {
@@ -330,7 +330,7 @@ export default function DeliveryRole({ onBack, currentUser }: DeliveryRoleProps)
         </div>
 
         <div style="border-top: 1px solid #cbd5e1; padding-top: 8px; text-align: center; font-size: 9px; color: #94a3b8;">
-          MIAULOO • Soluciones Integrales de Abasto • Tel: 427 116 9640 • San Juan del Río, Qro.
+          MIAULOO • Soluciones Integrales de Abasto • ${MIAULOO_ADDRESS} • Tel: 427 116 9640
         </div>
       </div>
     `;

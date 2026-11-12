@@ -11,7 +11,8 @@ import {
   exportToPDF, 
   exportTransferSheetToPDF, 
   printTransferSheetReceipt,
-  printElement 
+  printElement,
+  MIAULOO_ADDRESS
 } from '../utils/exportUtils';
 import { recordSaveTelemetry } from '../services/supabaseTelemetry';
 import { 
@@ -58,9 +59,9 @@ export function TransferSheetsManager({ currentUser, onRefreshParent }: Transfer
   const [createElaboratedBy, setCreateElaboratedBy] = useState('Areli Antonia Mireles Cruz');
   const [createClientName, setCreateClientName] = useState('');
   const [createDestination, setCreateDestination] = useState('SAN JUAN DEL RIO');
-  const [createAddress, setCreateAddress] = useState('Sta. Cruz 71, La Loma');
-  const [createCp, setCreateCp] = useState('76804');
-  const [createColonia, setCreateColonia] = useState('La Loma');
+  const [createAddress, setCreateAddress] = useState('CHABACANO 45');
+  const [createCp, setCreateCp] = useState('76810');
+  const [createColonia, setCreateColonia] = useState('PUEBLO QUIETO');
   const [createFiscalRegimen, setCreateFiscalRegimen] = useState('601 - General de Ley Personas Morales');
   const [createPhone, setCreatePhone] = useState('(52) 427 116 9640');
   const [createClientNo, setCreateClientNo] = useState('CLI-0042');
@@ -334,9 +335,9 @@ export function TransferSheetsManager({ currentUser, onRefreshParent }: Transfer
     setCreateDate(new Date().toISOString().split('T')[0]);
     setCreateClientName('');
     setCreateDestination('SAN JUAN DEL RIO');
-    setCreateAddress('Sta. Cruz 71, La Loma');
-    setCreateCp('76804');
-    setCreateColonia('La Loma');
+    setCreateAddress('CHABACANO 45');
+    setCreateCp('76810');
+    setCreateColonia('PUEBLO QUIETO');
     setCreateFiscalRegimen('601 - General de Ley Personas Morales');
     setCreatePhone('(52) 427 116 9640');
     setCreateClientNo('CLI-0042');
@@ -845,7 +846,7 @@ export function TransferSheetsManager({ currentUser, onRefreshParent }: Transfer
                     <span className="font-bold">MOVIL:</span> {selectedSheet.phone || '(52) 427 116 9640'}
                   </div>
                   <div className="p-1.5 col-span-2">
-                    <span className="font-bold">Expedido en:</span> Sta. Cruz 71, La Loma, 76804 San Juan del Río, Qro.
+                    <span className="font-bold">Expedido en:</span> {MIAULOO_ADDRESS}
                   </div>
                   <div className="p-1.5">
                     <span className="font-bold">Fecha:</span> {selectedSheet.date}

@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { MockDatabase } from '../data';
 import { RawMaterial, Client, Sale, OrderItem, DeliveryRoute, User, TransferSheet, TransferSheetItem, SaleNote, SaleNoteItem, AccountReceivable } from '../types';
-import { exportToExcel, exportToPDF, exportSaleNoteToPDF, printSaleNoteReceipt, exportTransferSheetToPDF, printTransferSheetReceipt, printElement } from '../utils/exportUtils';
+import { exportToExcel, exportToPDF, exportSaleNoteToPDF, printSaleNoteReceipt, exportTransferSheetToPDF, printTransferSheetReceipt, printElement, MIAULOO_ADDRESS } from '../utils/exportUtils';
 import { recordSaveTelemetry } from '../services/supabaseTelemetry';
 import { 
   saveRawMaterialToSupabase, 
@@ -100,9 +100,9 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
   const [tsElaboratedBy, setTsElaboratedBy] = useState('Areli Antonia Mireles Cruz');
   const [tsClientName, setTsClientName] = useState('JORGE LUIS');
   const [tsDestination, setTsDestination] = useState('SAN JUAN DEL RIO');
-  const [tsAddress, setTsAddress] = useState('Sta. Cruz 71, La Loma');
-  const [tsCp, setTsCp] = useState('76804');
-  const [tsColonia, setTsColonia] = useState('La Loma');
+  const [tsAddress, setTsAddress] = useState('CHABACANO 45');
+  const [tsCp, setTsCp] = useState('76810');
+  const [tsColonia, setTsColonia] = useState('PUEBLO QUIETO');
   const [tsFiscalRegimen, setTsFiscalRegimen] = useState('601 - General de Ley Personas Morales');
   const [tsPhone, setTsPhone] = useState('(52) 427 116 9640');
   const [tsClientNo, setTsClientNo] = useState('CLI-0042');
@@ -2120,7 +2120,7 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
                     <span className="font-bold">MOVIL:</span> {selectedTransferSheet.phone || '(52) 427 116 9640'}
                   </div>
                   <div className="p-1.5 col-span-2">
-                    <span className="font-bold">Expedido en:</span> Sta. Cruz 71, La Loma, 76804 San Juan del Río, Qro.
+                    <span className="font-bold">Expedido en:</span> {MIAULOO_ADDRESS}
                   </div>
                   <div className="p-1.5">
                     <span className="font-bold">Fecha:</span> {selectedTransferSheet.date}
@@ -2367,7 +2367,7 @@ export default function SalesRole({ onBack, currentUser, activeTab: propsActiveT
                 </div>
                 <div className="flex items-center space-x-1 col-span-2">
                   <MapPin className="w-3.5 h-3.5 text-red-600 shrink-0" />
-                  <span className="truncate">Rio Panuco Ext.35 M. 136 L. 0030 San Cayetano 1A Secc. San Juan del Río, Qro.</span>
+                  <span className="truncate">{MIAULOO_ADDRESS}</span>
                 </div>
               </div>
 

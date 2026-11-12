@@ -11,7 +11,8 @@ import {
   exportToPDF, 
   exportSaleNoteToPDF, 
   printSaleNoteReceipt, 
-  printElement 
+  printTableReport,
+  MIAULOO_ADDRESS
 } from '../utils/exportUtils';
 import { recordSaveTelemetry } from '../services/supabaseTelemetry';
 import { 
@@ -539,33 +540,7 @@ export function SaleNotesManager({ currentUser, onRefreshParent }: SaleNotesMana
                 `$${n.total.toFixed(2)}`,
                 n.active !== false ? 'ACTIVA' : 'CANCELADA'
               ]);
-              printElement(`
-                <div style="font-family: system-ui, sans-serif; padding: 10px;">
-                  <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #1e3a8a; padding-bottom:8px; margin-bottom:12px;">
-                    <div>
-                      <h2 style="margin:0; color:#1e3a8a; font-size:18px;">LISTADO DE NOTAS DE VENTA - MIAULOO</h2>
-                      <p style="margin:4px 0 0 0; color:#64748b; font-size:10px;">Generado: ${new Date().toLocaleString('es-MX')} • Total Registros: ${rows.length}</p>
-                    </div>
-                    <div style="text-align:right; font-size:10px; font-weight:bold; color:#1e3a8a;">
-                      DOCUMENTO OFICIAL
-                    </div>
-                  </div>
-                  <table style="width:100%; border-collapse:collapse; font-size:10px;">
-                    <thead>
-                      <tr style="background:#1e3a8a; color:white;">
-                        ${headers.map(h => `<th style="padding:6px 8px; text-align:left; border:1px solid #1e3a8a;">${h}</th>`).join('')}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      ${rows.map((r, idx) => `
-                        <tr style="background:${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
-                          ${r.map(c => `<td style="padding:5px 8px; border:1px solid #e2e8f0;">${c}</td>`).join('')}
-                        </tr>
-                      `).join('')}
-                    </tbody>
-                  </table>
-                </div>
-              `, 'Listado_Notas_Venta_Miauloo');
+              printTableReport('Listado Oficial de Notas de Venta - Miauloo', headers, rows, 'Listado_Notas_Venta_Miauloo');
             }}
             className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-xl text-xs font-bold flex items-center transition-all shadow-xs cursor-pointer"
             title="Imprimir listado en papel o guardar en PDF del navegador"
@@ -960,7 +935,7 @@ export function SaleNotesManager({ currentUser, onRefreshParent }: SaleNotesMana
                 </div>
                 <div className="flex items-center space-x-1 col-span-2">
                   <MapPin className="w-3.5 h-3.5 text-red-600 shrink-0" />
-                  <span className="truncate">Rio Panuco Ext.35 M. 136 L. 0030 San Cayetano 1A Secc. San Juan del Río, Qro.</span>
+                  <span className="truncate">{MIAULOO_ADDRESS}</span>
                 </div>
               </div>
 

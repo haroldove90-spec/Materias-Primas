@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { Sale, OrderItem, User, Client } from '../types';
 import { MockDatabase } from '../data';
-import { exportToExcel, exportToPDF, printTableReport, printElement, MIAULOO_LOGO } from '../utils/exportUtils';
+import { exportToExcel, exportToPDF, printTableReport, printElement, MIAULOO_LOGO, MIAULOO_ADDRESS } from '../utils/exportUtils';
 import { MIAULOO_LOGO_BASE64 } from '../utils/miaulooLogoBase64';
 import { recordSaveTelemetry } from '../services/supabaseTelemetry';
 import { 
@@ -755,7 +755,7 @@ export const SalesOrdersManager: React.FC<SalesOrdersManagerProps> = ({ currentU
                         TOTAL: $${Number(selectedSale.total || 0).toFixed(2)} MXN
                       </div>
                       <div style="border-top: 1px solid #cbd5e1; padding-top: 8px; text-align: center; font-size: 9px; color: #94a3b8;">
-                        Documento emitido por MIAULOO ERP • San Juan del Río, Qro.
+                        Documento emitido por MIAULOO ERP • ${MIAULOO_ADDRESS}
                       </div>
                     </div>
                   `, `Comprobante_${selectedSale.id}`);
